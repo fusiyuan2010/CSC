@@ -10,13 +10,13 @@
 
 inline void LZ::NewInsert1()
 {
-    uint32_t    *HT6=&mf_ht6_[cHash6*h6_width_];
+    uint32_t    *HT6=&mf_ht6_[cHash6*ht6_width_];
     uint32_t i;
 
     mf_ht2_[cHash2]=CURPOS;
     mf_ht3_[cHash3]=CURPOS;
 
-    for(i=h6_width_-1;i>0;i--)
+    for(i=ht6_width_-1;i>0;i--)
         HT6[i]=HT6[i-1];
 
     HT6[0]=CURPOS;
@@ -25,7 +25,7 @@ inline void LZ::NewInsert1()
 
 inline void LZ::NewInsertN(uint32_t len)
 {
-    uint32_t    *HT6=&mf_ht6_[cHash6*h6_width_];
+    uint32_t    *HT6=&mf_ht6_[cHash6*ht6_width_];
 
     uint32_t lastCurrHash6;
     uint32_t i;
@@ -33,7 +33,7 @@ inline void LZ::NewInsertN(uint32_t len)
     mf_ht2_[cHash2]=CURPOS;
     mf_ht3_[cHash3]=CURPOS;
 
-    for(i=h6_width_-1;i>0;i--)
+    for(i=ht6_width_-1;i>0;i--)
         HT6[i]=HT6[i-1];
 
     HT6[0]=CURPOS;
@@ -46,14 +46,14 @@ inline void LZ::NewInsertN(uint32_t len)
     {
         cHash6=HASH6(wnd_[wnd_curpos_]);
         cHash3=HASH3(wnd_[wnd_curpos_]);
-        HT6=&mf_ht6_[cHash6*h6_width_];
+        HT6=&mf_ht6_[cHash6*ht6_width_];
 
         mf_ht2_[*(uint16_t*)(wnd_+wnd_curpos_)]=CURPOS;
         mf_ht3_[cHash3]=CURPOS;
 
         if (lastCurrHash6!=cHash6)
         {
-            for(i=h6_width_-1;i>0;i--)
+            for(i=ht6_width_-1;i>0;i--)
                 HT6[i]=HT6[i-1];
         }
         HT6[0]=CURPOS;
@@ -91,15 +91,15 @@ uint32_t LZ::FindMatch(uint32_t idx,uint32_t minMatchLen)
     for(i=0;i<4;i++)
     {
         cmpPos1=wnd_curpos_>parser[idx].repDist[i]?
-            wnd_curpos_-parser[idx].repDist[i]:wnd_curpos_+wnd_Size-parser[idx].repDist[i];
+            wnd_curpos_-parser[idx].repDist[i]:wnd_curpos_+wnd_size_-parser[idx].repDist[i];
 
         if (i==0) mostRecPos=cmpPos1;
         cmpLen=0;
 
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>currBlockEndPos) && (cmpPos1<wnd_Size))
+        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos) && (cmpPos1<wnd_size_))
         {
             cmpPos2=wnd_curpos_;
-            remainLen=MIN(currBlockEndPos-wnd_curpos_, wnd_Size-cmpPos1);
+            remainLen=MIN(curblock_endpos-wnd_curpos_, wnd_size_-cmpPos1);
 
             if (remainLen<MIN_LEN_REP || remainLen<minMatchLen)
                 continue;
@@ -137,8 +137,8 @@ uint32_t LZ::FindMatch(uint32_t idx,uint32_t minMatchLen)
 
 
     //===================find repeat byte match=============================
-    if ((mostRecPos<wnd_curpos_ || mostRecPos>currBlockEndPos)
-        && (mostRecPos<wnd_Size) && (wnd_[mostRecPos]==wnd_[wnd_curpos_]) )
+    if ((mostRecPos<wnd_curpos_ || mostRecPos>curblock_endpos)
+        && (mostRecPos<wnd_size_) && (wnd_[mostRecPos]==wnd_[wnd_curpos_]) )
     {
         matchList[matchListSize].len=1;
         matchList[matchListSize].pos=4;
@@ -148,23 +148,23 @@ uint32_t LZ::FindMatch(uint32_t idx,uint32_t minMatchLen)
     //===================find repeat byte match=============================
 
     //===================find hash 6 match=============================
-    HT6=&mf_ht6_[cHash6*h6_width_];
+    HT6=&mf_ht6_[cHash6*ht6_width_];
     lastDist=1;
-    for(i=0;i<h6_width_;i++)
+    for(i=0;i<ht6_width_;i++)
     {
         cmpPos1=HT6[i]&0x1FFFFFFF;
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>currBlockEndPos)  
-            && (cmpPos1<wnd_Size) 
+        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos)  
+            && (cmpPos1<wnd_size_) 
             && ((HT6[i]>>29)==((wnd_[wnd_curpos_]&0x0E)>>1))) //cache
         {
             matchDist=wnd_curpos_>cmpPos1?
-                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_Size-cmpPos1;
+                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_size_-cmpPos1;
 
             if (matchDist<lastDist) break;
             lastDist=matchDist;
 
             cmpPos2=wnd_curpos_;
-            remainLen=MIN(currBlockEndPos-wnd_curpos_, wnd_Size-cmpPos1);
+            remainLen=MIN(curblock_endpos-wnd_curpos_, wnd_size_-cmpPos1);
 
             if (remainLen<MIN_LEN_HT6 || remainLen<minMatchLen)
                 continue;
@@ -210,14 +210,14 @@ uint32_t LZ::FindMatch(uint32_t idx,uint32_t minMatchLen)
     {
         cmpPos1=HT3[i]&0x1FFFFFFF;
 
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>currBlockEndPos) 
-            && (cmpPos1<wnd_Size)
+        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos) 
+            && (cmpPos1<wnd_size_)
             && ((HT3[i]>>29)==((wnd_[wnd_curpos_]&0x0E)>>1)))
         {
             cmpPos2=wnd_curpos_;
-            remainLen=MIN(currBlockEndPos-wnd_curpos_, wnd_Size-cmpPos1);
+            remainLen=MIN(curblock_endpos-wnd_curpos_, wnd_size_-cmpPos1);
             matchDist=wnd_curpos_>cmpPos1?
-                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_Size-cmpPos1;
+                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_size_-cmpPos1;
 
             if (remainLen<MIN_LEN_HT3 || remainLen<minMatchLen)
                 continue;
@@ -265,14 +265,14 @@ uint32_t LZ::FindMatch(uint32_t idx,uint32_t minMatchLen)
     {
         cmpPos1=HT2[i]&0x1FFFFFFF;
 
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>currBlockEndPos) 
-            && (cmpPos1<wnd_Size)
+        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos) 
+            && (cmpPos1<wnd_size_)
             && ((HT2[i]>>29)==((wnd_[wnd_curpos_]&0x0E)>>1)))
         {
             cmpPos2=wnd_curpos_;
-            remainLen=MIN(currBlockEndPos-wnd_curpos_, wnd_Size-cmpPos1);
+            remainLen=MIN(curblock_endpos-wnd_curpos_, wnd_size_-cmpPos1);
             matchDist=wnd_curpos_>cmpPos1?
-                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_Size-cmpPos1;
+                wnd_curpos_-cmpPos1:wnd_curpos_+wnd_size_-cmpPos1;
 
 
             if (remainLen<MIN_LEN_HT2 || remainLen<minMatchLen)
@@ -324,7 +324,7 @@ int LZ::LZMinBlockNew(uint32_t size,uint32_t TryLazy,uint32_t LazyStep,uint32_t 
     uint32_t lastBackPos=0;
     uint32_t lazyNum=0,lazyEndPos=0;
 
-    currBlockEndPos=wnd_curpos_+size;
+    curblock_endpos=wnd_curpos_+size;
     matchListSize=0;
 
     for(int i=0;i<size+1;i++)
@@ -532,7 +532,7 @@ void LZ::LZBackward(const uint32_t initWndPos,uint32_t start,uint32_t end)
             uint32_t tmpIdx=parser[i].finalChoice-1+parser[i].choices.startPos;
             if (matchList[tmpIdx].pos<4)
             {
-                model_->EncodeRepDistMatch(matchList[tmpIdx].pos,parser[i].finalLen-1);
+                model_->EncodeRepDistMatch(matchList[tmpIdx].pos,parser[i].finalLen-2);
 
                 uint32_t tmpDist=rep_dist_[matchList[tmpIdx].pos];
                 for(int j=matchList[tmpIdx].pos;j>0;j--)
@@ -550,7 +550,7 @@ void LZ::LZBackward(const uint32_t initWndPos,uint32_t start,uint32_t end)
             }
             else
             {
-                model_->EncodeMatch(matchList[tmpIdx].pos-4,parser[i].finalLen-1);
+                model_->EncodeMatch(matchList[tmpIdx].pos-4,parser[i].finalLen-2);
 
                 rep_dist_[3]=rep_dist_[2];
                 rep_dist_[2]=rep_dist_[1];
