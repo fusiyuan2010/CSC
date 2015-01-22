@@ -33,14 +33,10 @@ struct CSCSettings
 };
 
 
-class CCsc
+class CSCEncoder
 {
 public:
-    CCsc();
-    ~CCsc();
-
-    int Init(uint32_t operation,CSCSettings setting);
-    //operation should be ENCODE | DECODE
+    int Init(CSCSettings setting);
     
 
     void WriteEOF();
@@ -60,20 +56,13 @@ public:
     //Should be called before compress a file.src points
     //to first several bytes of file.
     
-    void EncodeInt(uint32_t num,uint32_t bits);
-    uint32_t DecodeInt(uint32_t bits);
-    //Put/Get num on CSC Stream
-
-
     int64_t GetCompressedSize();
     //Get current compressed size.
     
 
 private:
     CSCSettings m_setting;
-    bool m_initialized;
 
-    uint32_t m_operation;
     uint8_t *m_rcbuffer;
     uint8_t *m_bcbuffer;
     uint32_t fixedDataType; //
@@ -87,7 +76,7 @@ private:
     Analyzer m_analyzer;
 
     uint32_t m_succBlockSize;
-    //This determines how much maximumly the CCsc:Decompress can decompress
+    //This determines how much maximumly the CSCEncoder:Decompress can decompress
     // in one time. 
 
     bool m_useFilters;

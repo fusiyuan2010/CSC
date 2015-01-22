@@ -4,6 +4,14 @@
 #include <stdlib.h>
 
 
+extern uint32_t MDistBound1[65];
+extern uint32_t MDistExtraBit1[64];
+extern uint32_t matchLenBound[17];
+extern uint32_t matchLenExtraBit[16];
+extern uint32_t MDistBound2[17];
+extern uint32_t MDistExtraBit2[16];
+extern uint32_t MDistBound3[9];
+extern uint32_t MDistExtraBit3[8];
 
 #define FEncodeBit(price,v,p) do\
 {\
@@ -21,7 +29,7 @@ uint32_t Model::GetLiteralPrice(uint32_t fstate,uint32_t fctx,uint32_t c)
 	FEncodeBit(result,0,p_state_[fstate*3+0]);
 
 	c=c|0x100;
-	uint32_t *p=&p_lit_[(fctx)*256];
+	uint32_t *p=&p_lit_[(fctx >> 4)*256];
 	do
 	{
 		FEncodeBit(result,(c >> 7) & 1,p[c>>8]);
@@ -58,6 +66,7 @@ uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t 
 	j=(repIndex)&1; FEncodeBit(result,j,p_repdist_[fstate*4+i]); 
 
 
+    /*
 	if (matchLen>129)
 	{
 		c=15|0x10;
@@ -94,6 +103,7 @@ uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t 
 	while (c < 0x100);
 
 	result+=matchLenExtraBit[slot]*128;
+    */
 
 	return result;
 }
@@ -110,6 +120,7 @@ uint32_t Model::GetMatchPrice(uint32_t fstate,uint32_t matchDist,uint32_t matchL
 	FEncodeBit(result,1,p_state_[fstate*3+0]);
 	FEncodeBit(result,1,p_state_[fstate*3+1]);
 
+    /*
 	if (matchLen>129)
 	{
 		c=15|0x10;
@@ -208,5 +219,6 @@ uint32_t Model::GetMatchPrice(uint32_t fstate,uint32_t matchDist,uint32_t matchL
 		result+=MDistExtraBit1[slot]*128;
 	}
 	
+    */
 	return result;
 }

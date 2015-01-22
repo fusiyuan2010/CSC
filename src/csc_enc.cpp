@@ -6,7 +6,7 @@
 
 struct CSCInstance
 {
-    CCsc *encoder;
+    CSCEncoder *encoder;
     MemIO *io;
     uint32_t raw_blocksize;
 };
@@ -15,8 +15,8 @@ void CSCEncProps_Init(CSCEncProps *p)
 {
     p->dict_size = 64 * MB;
     p->hash_bits = 22;
-    p->hash_width = 12;
-    p->lz_mode = 3;
+    p->hash_width = 16;
+    p->lz_mode = 1;
     p->DLTFilter = 1;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
@@ -44,8 +44,8 @@ CSCEncHandle CSCEnc_Create(const CSCEncProps *props,
     csc->raw_blocksize = props->raw_blocksize;
     setting.io = csc->io;
 
-    csc->encoder = new CCsc();
-    csc->encoder->Init(ENCODE, setting);
+    csc->encoder = new CSCEncoder();
+    csc->encoder->Init(setting);
     return (void*)csc;
 }
 

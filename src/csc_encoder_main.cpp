@@ -100,36 +100,16 @@ void CSCSettings::SetDefaultMethod(uint8_t method)
     TXTFilter=1;
 }
 
-CCsc::CCsc()
-{
-}
-
-void CCsc::EncodeInt(uint32_t num,uint32_t bits)
-{
-    m_model.EncodeInt(num,bits);
-}
-
-
-uint32_t CCsc::DecodeInt(uint32_t bits)
-{
-    return m_model.DecodeInt(bits);
-}
-
-
-int CCsc::Init(uint32_t operation,CSCSettings setting)
+int CSCEncoder::Init(CSCSettings setting)
 {
     int err;
 
-    //if (m_initialized)
-    //    return ALREADY_INITIALIZED;
-    //m_initialized=false;
     m_lz.model_ = &m_model;
     typeArg1=typeArg2=typeArg3=0;
     fixedDataType=DT_NONE;
 
 
     m_setting=setting;
-    m_operation=operation;
 
     m_coder.io_ =m_setting.io;
     m_succBlockSize=m_setting.maxSuccBlockSize;
@@ -145,11 +125,11 @@ int CCsc::Init(uint32_t operation,CSCSettings setting)
 
     m_analyzer.Init();
     m_filters.Init();
-    m_coder.Init(operation,m_rcbuffer,m_bcbuffer,m_setting.outStreamBlockSize);
+    m_coder.Init(m_rcbuffer,m_bcbuffer,m_setting.outStreamBlockSize);
     err=m_model.Init(&m_coder);
     if (err<0)
         goto FREE_ON_ERROR;
-    err=m_lz.Init(m_setting.wndSize,operation,m_setting.hashBits,m_setting.hashWidth);
+    err=m_lz.Init(m_setting.wndSize, m_setting.hashBits,m_setting.hashWidth);
     if (err<0)
         goto FREE_ON_ERROR;
 
@@ -159,7 +139,6 @@ int CCsc::Init(uint32_t operation,CSCSettings setting)
     else
         m_useFilters=true;
 
-    m_initialized=true;
     return NO_ERROR;
 
 FREE_ON_ERROR:
@@ -169,7 +148,7 @@ FREE_ON_ERROR:
 }
 
 
-void CCsc::InternalCompress(uint8_t *src,uint32_t size,uint32_t type)
+void CSCEncoder::InternalCompress(uint8_t *src,uint32_t size,uint32_t type)
 {
     uint32_t lzMode=m_setting.lzMode;
 
@@ -248,91 +227,12 @@ void CCsc::InternalCompress(uint8_t *src,uint32_t size,uint32_t type)
     }
 }
 
-
-
-int CCsc::Decompress(uint8_t *dst,uint32_t *size)
-{
-    uint32_t type;
-    int returnValue=0;
-
-    if (!m_initialized)
-        return OPERATION_ERROR;
-
-    type=m_model.DecodeInt(5);
-    switch (type)
-    {
-    case DT_NORMAL:
-        returnValue=m_lz.Decode(dst,size,m_succBlockSize);
-        if (returnValue<0)
-            return returnValue;
-        break;
-    case DT_EXE:
-        returnValue=m_lz.Decode(dst,size,m_succBlockSize);
-        if (returnValue<0)
-            return returnValue;
-        m_filters.Inverse_E89(dst,*size);
-        break;
-    case DT_ENGTXT:
-        *size=m_model.DecodeInt(MaxChunkBits);
-        returnValue=m_lz.Decode(dst,size,m_succBlockSize);
-        if (returnValue<0)
-            return returnValue;
-        m_filters.Inverse_Dict(dst,*size);
-        break;
-    case DT_BAD:
-        m_model.DecompressBad(dst,size);
-        m_lz.DuplicateInsert(dst,*size);
-        break;
-    //case DT_HARD:
-    //    m_model.DecompressHard(dst,size);
-    //    m_lz.DuplicateInsert(dst,*size);
-    //    break;
-    /*case DT_AUDIO:
-        m_model.DecompressHard(dst,size);
-        m_filters.Inverse_Audio(dst,*size,typeArg1,typeArg2);
-        m_lz.DuplicateInsert(dst,*size);
-        break;
-    case DT_RGB:
-        typeArg1=m_model.DecodeInt(16);
-        typeArg2=m_model.DecodeInt(6);
-        m_model.DecompressHard(dst,size);
-        m_filters.Inverse_RGB(dst,*size,typeArg1,typeArg2);
-        m_lz.DuplicateInsert(dst,*size);
-        break;*/
-    case SIG_EOF:
-        *size=0;
-        break;
-    default:
-        if (type>=DT_DLT && type<DT_DLT+DLT_CHANNEL_MAX)
-        {
-            uint32_t chnNum=DltIndex[type-DT_DLT];
-            //if (chnNum>=0)
-            m_model.DecompressRLE(dst,size);
-            //else
-            //    m_model.DecompressDelta(dst,size);
-            m_filters.Inverse_Delta(dst,*size,chnNum);
-            m_lz.DuplicateInsert(dst,*size);
-        }
-        else
-        {
-            //printf("Error No such type :%d\n",type);
-            return DECODE_ERROR;
-        }
-        break;
-    }
-    return 0;
-}
-
-void CCsc::Compress(uint8_t *src,uint32_t size)
+void CSCEncoder::Compress(uint8_t *src,uint32_t size)
 {
     uint32_t lastType,thisType;
     uint32_t lastBegin,lastSize;
     uint32_t currBlockSize;
     uint32_t progress;
-
-    if (!m_initialized)
-        return;
-
 
     lastBegin=lastSize=0;
     lastType=DT_NORMAL;
@@ -598,49 +498,34 @@ void CCsc::Compress(uint8_t *src,uint32_t size)
 }
 
 
-void CCsc::Flush()
+void CSCEncoder::Flush()
 {
-    if (!m_initialized)
-        return;
     //m_model.EncodeInt(SIG_EOF,5);
     m_coder.Flush();
 }
 
-void CCsc::WriteEOF()
+void CSCEncoder::WriteEOF()
 {
-    if (!m_initialized)
-        return;
     m_model.EncodeInt(SIG_EOF,5);
 }
 
 
-void CCsc::CheckFileType(uint8_t *src, uint32_t size)
+void CSCEncoder::CheckFileType(uint8_t *src, uint32_t size)
 {
     //fixedDataType=m_analyzer.analyzeHeader(src,size,&typeArg1,&typeArg2,&typeArg3);
     fixedDataType=DT_NONE;
     return;
 }
 
-void CCsc::Destroy()
+void CSCEncoder::Destroy()
 {
-    if (!m_initialized)
-        return;
-
     m_lz.Destroy();
+    m_model.Destroy();
     SAFEFREE(m_rcbuffer);
     SAFEFREE(m_bcbuffer);
-    m_initialized=false;
 }
 
-
-CCsc::~CCsc()
+int64_t CSCEncoder::GetCompressedSize()
 {
-    Destroy();
-}
-
-int64_t CCsc::GetCompressedSize()
-{
-    if (!m_initialized)
-        return 0;
     return (m_coder.outsize_ + m_coder.bc_size_ + m_coder.bc_size_);
 }

@@ -3,6 +3,7 @@
 #include <csc_filters.h>
 #include <Common.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #define DecodeBit(coder, v, p) do{\
@@ -38,99 +39,23 @@
         v = v | x->coder_decode_direct(16);\
     }}while (0)
 
-
-static uint32_t MDistBound1[65]=
-{
-    1,            2,            3,            4,
-    6,            8,            10,            12,
-    16,            20,            24,            28,
-    36,            44,            52,            60,
-    76,            92,            108,        124,
-    156,        188,        252,        316,
-    444,        572,        828,        1084,
-    1596,        2108,        3132,        4156,
-    6204,        8252,        12348,        16444,
-    24636,        32828,        49212,        65596,
-    98364,        131132,        196668,        262204,
-    393276,        524348,        786492,        1048636,
-    1572924,    2097212,    3145788,    4194364,
-    6291516,    8388668,    12582972,    16777276,
-    25165884,    33554492,    50331708,    67108924,
-    100663356,    134217788,    201326652,    268435516,
-    unsigned(-1),
+static const uint32_t dist_table_[33] = {
+    0,      1,      2,      3,
+    5,      9,      17,     33,
+    65,     129,    257,    513,
+    1025,   2049,   4097,   8193,
+    16385,  32769,  65537,  131073,
+    262145, 524289, 1048577,        2097153,
+    4194305,        8388609,        16777217,       33554433,
+    67108865,       134217729,      268435457,      536870913,
+    1073741825,
 };
 
-static uint32_t MDistExtraBit1[64]=
-{
-    0,    0,    0,    1,
-    1,    1,    1,    2,
-    2,    2,    2,    3,
-    3,    3,    3,    4,
-    4,    4,    4,    5,
-    5,    6,    6,    7,
-    7,    8,    8,    9,
-    9,    10,    10,    11,
-    11,    12,    12,    13,
-    13,    14,    14,    15,
-    15,    16,    16,    17,
-    17,    18,    18,    19,
-    19,    20,    20,    21,
-    21,    22,    22,    23,
-    23,    24,    24,    25,
-    25,    26,    26,    28,
-};
-
-
-static uint32_t matchLenBound[17]=
-{
-    1,        2,        3,        4,
-    5,        6,        8,        10,
-    14,        18,        26,        34,
-    50,        66,        98,        130,
-    unsigned(-1),
-};
-
-static uint32_t matchLenExtraBit[16]=
-{
-
-    0,    0,    0,    0,
-    0,    1,    1,    2,
-    2,    3,    3,    4,
-    4,    5,    5,    6,
-};
-
-static uint32_t MDistBound2[17]=
-{
-    1,        2,        4,        8,
-    16,        32,        48,        64,
-    96,        128,    192,    256,
-    384,    512,    768,    1024,
-    unsigned(-1),
-};
-
-
-static uint32_t MDistExtraBit2[16]=
-{
-    0,    1,    2,    3,
-    4,    4,    4,    5,
-    5,    6,    6,    7,
-    7,    8,    8,    10,
-};
-
-
-
-static uint32_t MDistBound3[9]=
-{
-    1,        2,        3,        4,
-    6,        8,        16,        32,
-    unsigned(-1),
-};
-
-
-static uint32_t MDistExtraBit3[8]=
-{
-    0,    0,    0,    1,
-    1,    3,    4,    5,
+static const uint32_t rev16_table_[16] = {
+    0,      8,      4,      12,
+    2,      10,     6,      14,
+    1,      9,      5,      13,
+    3,      11,     7,      15,
 };
 
 class CSCDecoder
@@ -171,13 +96,13 @@ class CSCDecoder
     }
 
     void decode_rle(uint8_t *dst, uint32_t *size) {
-        uint32_t c, flag, slot, len, i;
+        uint32_t c, flag, len, i;
         uint32_t sCtx = 0;
         uint32_t *p=NULL;
 
-        if (p_delta_==NULL) {
-            p_delta_=(uint32_t*)malloc(256*256*4);
-            for (i=0;i<256*256;i++)
+        if (p_delta_ == NULL) {
+            p_delta_ = (uint32_t*)malloc(256*256*sizeof(uint32_t));
+            for (i = 0;i< 256 * 256;i++)
                 p_delta_[i]=2048;
         }
 
@@ -185,9 +110,9 @@ class CSCDecoder
         for (i = 0; i < *size; ) {
             flag=0;
             DecodeBit(this, flag, p_rle_flag_);
+            c = 1;
             if (flag == 0) {
-                p=&p_delta_[sCtx*256];
-                c=1;
+                p = &p_delta_[sCtx*256];
                 do  { 
                     DecodeBit(this, c, p[c]);
                 } while (c < 0x100);
@@ -195,19 +120,7 @@ class CSCDecoder
                 sCtx = dst[i];
                 i++;
             } else {
-                c=1;
-                do { 
-                    DecodeBit(this, c, p_rle_len_[c]);
-                } while (c < 0x10);
-
-                slot = c & 0xF;
-                if (matchLenExtraBit[slot] > 0){
-                    DecodeDirect(this, c, matchLenExtraBit[slot]);
-                    len = matchLenBound[slot] + c;
-                } else
-                    len = matchLenBound[slot];
-
-                len += 10;
+                len = decode_matchlen_2() + 11;
                 while(len-- > 0) {
                     dst[i] = dst[i-1];
                     i++;
@@ -230,128 +143,118 @@ class CSCDecoder
         return ctx_;
     }
 
-    void decode_match(uint32_t &matchDist, uint32_t &matchLen) {
-        matchLen = 0;
-
-        uint32_t slot;
-        uint32_t i = 1;
-        do { 
-            DecodeBit(this, i, p_len_[i]);
-        } while (i < 0x10);
-        slot = i & 0xF;
-
-        if (slot == 15) {
-            // a long match length
-            i = 1;
-            do { 
-                matchLen += 129;
-                DecodeBit(this, i, p_longlen_);
-            } while ((i & 0x1) == 0);
-
-            i = 1;
-            do { 
-                DecodeBit(this, i, p_len_[i]);
-            } while (i < 0x10);
-            slot = i & 0xF;
-        }
-
-        if (matchLenExtraBit[slot]>0) {
-            DecodeDirect(this, i, matchLenExtraBit[slot]);
-            matchLen += matchLenBound[slot] + i;
-        } else
-            matchLen += matchLenBound[slot];
-
+    uint32_t decode_matchlen_1() {
+        uint32_t v = 0, lenbase;
         uint32_t *p;
-        i = 1;
-        if (matchLen == 1) {
-            p = &p_dist3_[0];
+        DecodeBit(this, v, p_matchlen_slot_[0]);
+        if (v == 0) {
+            p = p_matchlen_extra1_;
+            lenbase = 0;
+        } else {
+            v = 0;
+            DecodeBit(this, v, p_matchlen_slot_[1]);
+            if (v == 0) {
+                p = p_matchlen_extra2_;
+                lenbase = 8;
+            } else {
+                p = p_matchlen_extra3_;
+                lenbase = 16;
+            }
+        }
+
+        uint32_t i = 1;
+        if (lenbase == 16) {  // decode 7 bits
             do { 
                 DecodeBit(this, i, p[i]);
-            } while (i < 0x8);
-            slot = i & 0x7;
+            } while (i < 0x80);
+            return lenbase + (i & 0x7F);
+        } else { // decode 3 bits
+            do { 
+                DecodeBit(this, i, p[i]);
+            } while (i < 0x08);
+            return lenbase + (i & 0x07);
+        }
+    }
 
-            if (MDistExtraBit3[slot]>0) {
-                DecodeDirect(this, i, MDistExtraBit3[slot]);
-                matchDist = MDistBound3[slot] + i;
-            } else
-                matchDist = MDistBound3[slot];
-        } else if (matchLen == 2) {
-            p = &p_dist2_[0];
+    uint32_t decode_matchlen_2() {
+        uint32_t len = decode_matchlen_1();
+        if (len == 143) {
+            uint32_t v = 0;
+            for(;; v = 0, len += 143) {
+                DecodeBit(this, v, p_longlen_);
+                if (v) 
+                    break;
+            }
+            return len + decode_matchlen_1();
+        } else 
+            return len;
+    }
+
+    void decode_match(uint32_t &dist, uint32_t &len) {
+        len = decode_matchlen_2();
+        uint32_t pdist_pos, sbits;
+        switch(len) {
+            case 0:
+                pdist_pos = 0;
+                sbits = 3;
+                break;
+            case 1:
+            case 2:
+                pdist_pos = 16 * (len - 1) + 8; 
+                sbits = 4;
+                break;
+            case 3:
+            case 4:
+            case 5:
+                pdist_pos = 32 * (len - 3) + 8 + 16 * 2; 
+                sbits = 5;
+                break;
+            default:
+                pdist_pos = 32 * 3 + 8 + 16 * 2; 
+                sbits = 5;
+                break;
+        };
+        uint32_t *p = p_dist_ + pdist_pos;
+        uint32_t slot, i = 1;
+        do { 
+            DecodeBit(this, i, p[i]);
+        } while (i < (1u << sbits));
+        slot = i & ((1 << sbits) - 1);
+        if (slot <= 2)
+            dist = slot;
+        else {
+            uint32_t ebits = slot - 2;
+            uint32_t elen = 0;
+            if (ebits > 4) 
+                DecodeDirect(this, elen, ebits - 4);
+            i = 1;
+            p = &p_matchdist_extra_[(ebits- 1) * 16];
             do { 
                 DecodeBit(this, i, p[i]);
             } while (i < 0x10);
-            slot = i & 0xF;
-
-            if (MDistExtraBit2[slot]>0) {
-                DecodeDirect(this, i, MDistExtraBit2[slot]);
-                matchDist = MDistBound2[slot] + i;
-            } else
-                matchDist = MDistBound2[slot];
-        } else {
-            uint32_t lenCtx = matchLen > 5 ? 3: matchLen - 3;
-            p = &p_dist1_[lenCtx * 64];
-            do { 
-                DecodeBit(this, i, p[i]);
-            } while (i < 0x40);
-            slot = i & 0x3F;
-
-            if (MDistExtraBit1[slot]>0) {
-                DecodeDirect(this, i, MDistExtraBit1[slot]);
-                matchDist = MDistBound1[slot] + i;
-            } else
-                matchDist = MDistBound1[slot];
+            dist = dist_table_[slot] + (elen << 4) + rev16_table_[i & 0x0F];
         }
-
         state_ = (state_ * 4 + 1) & 0x3F;
+        //printf("%u %u\n", dist, len);
         return;
     }
 
     void set_lit_ctx(uint32_t c) {
-        ctx_=c;
+        ctx_ = (c >> 0);
     }
 
     void decode_1byte_match(void) {
         state_ = (state_ * 4 + 2) & 0x3F;
-        ctx_ = 16;
+        ctx_ = 0;
     }
 
-    void decode_repdist_match(uint32_t &repIndex,uint32_t &matchLen) {
-        matchLen=0;
-
-        uint32_t i,slot;
-        i = 1;
+    void decode_repdist_match(uint32_t &rep_idx, uint32_t &match_len) {
+        uint32_t i = 1;
         do { 
-            DecodeBit(this, i, p_repdist_[state_*4+i]);
+            DecodeBit(this, i, p_repdist_[state_ * 3 + i - 1]);
         } while (i < 0x4);
-        repIndex = i & 0x3;
-
-        i = 1;
-        do { 
-            DecodeBit(this, i, p_len_[i]);
-        } while (i < 0x10);
-        slot = i & 0xF;
-
-        if (slot == 15) {
-            // a long match length
-            i = 1;
-            do { 
-                matchLen += 129;
-                DecodeBit(this, i, p_longlen_);
-            } while ((i & 0x1) == 0);
-
-            i = 1;
-            do { 
-                DecodeBit(this, i, p_len_[i]);
-            } while (i < 0x10);
-            slot = i & 0xF;
-        }
-
-        if (matchLenExtraBit[slot]>0) {
-            DecodeDirect(this, i, matchLenExtraBit[slot]);
-            matchLen += matchLenBound[slot] + i;
-        } else
-            matchLen += matchLenBound[slot];
-
+        rep_idx = i & 0x3;
+        match_len = decode_matchlen_2();
         state_ = (state_ * 4 + 3) & 0x3F;
     }
 
@@ -396,7 +299,7 @@ public:
         rc_size_ += 5;
 
         // model
-        p_lit_ = (uint32_t*)malloc(256 * 257 * sizeof(uint32_t));
+        p_lit_ = (uint32_t*)malloc(256 * 256 * sizeof(uint32_t));
         if (!p_lit_)
             goto FREE_ON_ERROR;
 
@@ -405,19 +308,22 @@ public:
 
 #define INIT_PROB(P, K) do{for(int i = 0; i < K; i++) P[i] = 2048;}while(0)
         INIT_PROB(p_state_, 64 * 3);
-        INIT_PROB(p_lit_, 256 * 257);
-        INIT_PROB(p_repdist_, 64 * 4);
-        INIT_PROB(p_dist1_, 64 * 4);
-        INIT_PROB(p_dist2_, 16);
-        INIT_PROB(p_dist3_, 8);
+        INIT_PROB(p_lit_, 256 * 256);
+        INIT_PROB(p_repdist_, 64 * 3);
+        INIT_PROB(p_dist_, 8 + 16 * 2 + 32 * 4);
         INIT_PROB(p_rle_len_, 16);
-        INIT_PROB(p_len_, 16);
+
+        INIT_PROB(p_matchlen_slot_, 2);
+        INIT_PROB(p_matchlen_extra1_, 8);
+        INIT_PROB(p_matchlen_extra2_, 8);
+        INIT_PROB(p_matchlen_extra3_, 128);
+        INIT_PROB(p_matchdist_extra_, 29 * 16);
 #undef INIT_PROB
 
         p_longlen_ = 2048;
         p_rle_flag_ = 2048;
         state_ = 0;    
-        ctx_ = 256;
+        ctx_ = 0;
 
         // LZ engine
         wnd_size_ = dict_size;
@@ -489,15 +395,18 @@ private:
     uint32_t p_rle_len_[16];
 
     // prob of literals
-    uint32_t *p_lit_;//Original [17][256]
+    uint32_t *p_lit_;
     uint32_t *p_delta_;
 
-    uint32_t p_repdist_[64*4];
-    uint32_t p_dist1_[4*64];
-    uint32_t p_dist2_[16];
-    uint32_t p_dist3_[8];
+    uint32_t p_repdist_[64 * 4];
+    uint32_t p_dist_[8 + 16 * 2 + 32 * 4];  //len 0 , < 64
+    uint32_t p_matchdist_extra_[29 * 16];
 
-    uint32_t p_len_[16];
+    uint32_t p_matchlen_slot_[2];
+    uint32_t p_matchlen_extra1_[8];
+    uint32_t p_matchlen_extra2_[8];
+    uint32_t p_matchlen_extra3_[128];
+
     uint32_t p_longlen_;
     uint32_t ctx_;
     uint32_t p_state_[4*4*4*3];//Original [64][3]
@@ -528,12 +437,13 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
 
             uint32_t dist, len, cpy_pos;
             uint8_t *cpy_src ,*cpy_dst;
-            if (v==1) {
+            if (v == 1) {
                 decode_match(dist, len);
-                if (len == 2 && dist == 2047) 
+                if (len == 0 && dist == 64) 
                     // End of a block
                     break;
-                len++;
+                dist++;
+                len += 2;
                 rep_dist_[3] = rep_dist_[2];
                 rep_dist_[2] = rep_dist_[1];
                 rep_dist_[1] = rep_dist_[0];
@@ -561,14 +471,14 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
                     i++;
                     set_lit_ctx(wnd_[wnd_curpos_-1]);
                 } else {
-                    uint32_t dist_idx;
-                    decode_repdist_match(dist_idx, len);
-                    len++;
+                    uint32_t repdist_idx;
+                    decode_repdist_match(repdist_idx, len);
+                    len += 2;
                     if (len + i > limit) 
                         return DECODE_ERROR;
 
-                    dist = rep_dist_[dist_idx];
-                    for(int j = dist_idx ; j > 0; j--) 
+                    dist = rep_dist_[repdist_idx];
+                    for(int j = repdist_idx ; j > 0; j--) 
                         rep_dist_[j] = rep_dist_[j-1];
                     rep_dist_[0] = dist;
 

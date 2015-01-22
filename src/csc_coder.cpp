@@ -2,10 +2,8 @@
 #include <stdio.h>
 
 
-void Coder::Init(uint32_t x, uint8_t *rc_buf, uint8_t *bc_buf, uint32_t size)
+void Coder::Init(uint8_t *rc_buf, uint8_t *bc_buf, uint32_t size)
 {
-    m_op=x;
-
     rc_low_ = 0;
     rc_range_ = 0xFFFFFFFF;
     rc_cachesize_ = 1;
@@ -17,27 +15,9 @@ void Coder::Init(uint32_t x, uint8_t *rc_buf, uint8_t *bc_buf, uint32_t size)
 
     outsize_ = 0;
 
-    if (m_op==DECODE)
-    {
-        prc_ = rc_buf_ = rc_buf;
-        pbc_ = bc_buf_ = bc_buf;
-
-        io_->ReadRCData(rc_buf_, rc_bufsize_);
-        io_->ReadBCData(bc_buf_, bc_bufsize_);
-
-        rc_code_ = ((uint32_t)prc_[1] << 24) 
-            | ((uint32_t)prc_[2] << 16) 
-            | ((uint32_t)prc_[3] << 8) 
-            | ((uint32_t)prc_[4]);
-        prc_+=5;
-        rc_size_+=5;
-    }
-    else
-    {
-        prc_ = rc_buf_ = rc_buf;
-        pbc_ = bc_buf_ = bc_buf;
-        rc_bufsize_ = bc_bufsize_ = size;
-    }
+    prc_ = rc_buf_ = rc_buf;
+    pbc_ = bc_buf_ = bc_buf;
+    rc_bufsize_ = bc_bufsize_ = size;
 }
 
 
