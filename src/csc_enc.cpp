@@ -13,9 +13,9 @@ struct CSCInstance
 
 void CSCEncProps_Init(CSCEncProps *p)
 {
-    p->dict_size = 64 * MB;
-    p->hash_bits = 22;
-    p->hash_width = 16;
+    p->dict_size = 512 * MB;
+    p->hash_bits = 24;
+    p->hash_width = 4;
     p->lz_mode = 1;
     p->DLTFilter = 1;
     p->TXTFilter = 1;
@@ -79,13 +79,17 @@ int CSCEnc_Encode(CSCEncHandle p,
     int ret = 0;
     CSCInstance *csc = (CSCInstance *)p;
     uint8_t *buf = new uint8_t[csc->raw_blocksize];
+    uint64_t insize = 0;
 
     for(;;) {
         size_t size = csc->raw_blocksize;
         ret = is->Read(is, buf, &size);
         if (ret >= 0 && size) {
+            insize += size;
             csc->encoder->Compress(buf, size);
             ret = 0;
+            if (progress)
+                progress->Progress(progress, insize, csc->encoder->GetCompressedSize());
         }
 
         if (ret < 0 || size < csc->raw_blocksize)

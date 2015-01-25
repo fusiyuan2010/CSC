@@ -132,7 +132,6 @@ class CSCDecoder
 
     uint32_t decode_literal() {
         uint32_t i = 1, *p;
-
         p = &p_lit_[ctx_ * 256];
         do { 
             DecodeBit(this, i, p[i]);
@@ -140,6 +139,7 @@ class CSCDecoder
 
         ctx_ = i & 0xFF;
         state_ = (state_ * 4 + 0) & 0x3F;
+        //printf("[%u](%u)\n", ctx_, lctx);
         return ctx_;
     }
 
@@ -245,6 +245,7 @@ class CSCDecoder
 
     void decode_1byte_match(void) {
         state_ = (state_ * 4 + 2) & 0x3F;
+        //printf("Rep0Len1\n");
         ctx_ = 0;
     }
 
@@ -256,6 +257,7 @@ class CSCDecoder
         rep_idx = i & 0x3;
         match_len = decode_matchlen_2();
         state_ = (state_ * 4 + 3) & 0x3F;
+        //printf("Rep %u %u\n", rep_idx, match_len);
     }
 
     int lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit);
@@ -357,6 +359,9 @@ FREE_ON_ERROR:
     }
 
     int Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize);
+    uint64_t GetCompressedSize() {
+        return outsize_ + rc_size_ + bc_size_;
+    }
 
 private:
     MemIO *io_;
@@ -626,10 +631,17 @@ int CSCDec_Decode(CSCDecHandle p,
     int ret = 0;
     CSCInstance *csc = (CSCInstance *)p;
     uint8_t *buf = new uint8_t[csc->raw_blocksize];
+    uint64_t outsize = 0;
 
     for(;;) {
         uint32_t size;
         ret = csc->decoder->Decompress(buf, &size, csc->raw_blocksize);
+        if (ret == 0)
+            outsize += size;
+
+        if (progress)
+            progress->Progress(progress, csc->decoder->GetCompressedSize(), outsize);
+
         if (size == 0 || ret < 0)
             break;
 
