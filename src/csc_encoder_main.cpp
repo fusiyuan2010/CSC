@@ -527,5 +527,5 @@ void CSCEncoder::Destroy()
 
 int64_t CSCEncoder::GetCompressedSize()
 {
-    return (m_coder.outsize_ + m_coder.bc_size_ + m_coder.bc_size_);
+    return (m_coder.outsize_ + m_coder.rc_size_ + m_coder.bc_size_);
 }
