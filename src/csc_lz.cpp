@@ -7,7 +7,6 @@
 #include <csc_lz.h>
 #include <stdio.h>
 
-
 int LZ::Init(uint32_t WindowSize)
 {
     return Init(WindowSize, 22, 1);
@@ -22,6 +21,8 @@ int LZ::Init(uint32_t WindowSize, uint32_t hashBits,uint32_t hashWidth)
     if(wnd_size_>MaxDictSize)
         wnd_size_=MaxDictSize;
 
+    ht6_bits_=hashBits;
+    ht6_width_=hashWidth;
 
     wnd_ = NULL;
     mf_ht2_
@@ -40,8 +41,17 @@ int LZ::Init(uint32_t WindowSize, uint32_t hashBits,uint32_t hashWidth)
     if (mf_ht3_==NULL)
         goto FREE_ON_ERROR;
 
-    ht6_bits_=hashBits;
-    ht6_width_=hashWidth;
+    /*
+    bt_nodes_ = (uint32_t*)malloc(sizeof(uint32_t) * 2 * wnd_size_);
+    if (bt_nodes_ == NULL)
+        goto FREE_ON_ERROR;
+    memset(bt_nodes_, 0, sizeof(uint32_t) * 2 * wnd_size_);
+
+    bt_start_ = (uint32_t*)malloc(sizeof(uint32_t) * (1 << ht6_bits_));
+    if (bt_nodes_ == NULL)
+        goto FREE_ON_ERROR;
+    memset(bt_start_, 0, sizeof(uint32_t) * (1 << ht6_bits_));
+    */
 
     mf_ht6raw_=(uint32_t*)malloc(sizeof(uint32_t)*ht6_width_*(1<<ht6_bits_)+256);
     if (mf_ht6raw_==NULL)
@@ -115,7 +125,7 @@ void LZ::EncodeNormal(uint8_t *src,uint32_t size,uint32_t lzMode)
         else if (lzMode==0)
             compress_normal(currBlockSize, false, true);
         else 
-            compress_normal(currBlockSize, false, true);
+            compress_advanced(currBlockSize);
             
         if (wnd_curpos_>=wnd_size_) wnd_curpos_=0;
         progress+=currBlockSize;
@@ -303,6 +313,61 @@ void LZ::slide_pos(uint32_t len, bool mffast)
         uint32_t curhash3 = HASH3(wnd_[pos]);
         mf_ht3_[curhash3] = v;
 
+
+    if (0)
+    {
+    uint32_t wpos = pos;
+    uint32_t curhash4 = HASH6(wnd_[wpos]);
+    //uint32_t curhash6 = HASH6(wnd_[wpos]);
+    uint32_t cmp_pos = bt_start_[curhash4];
+    uint32_t *l = &bt_nodes_[wpos * 2], *r = &bt_nodes_[wpos * 2 + 1];
+    uint32_t lenl = 0, lenr = 0;
+
+    for(uint32_t i = 0; i < 16; i++) {
+        if (cmp_pos >= wpos && cmp_pos < curblock_endpos) break;
+        //if (dist < last_dist) break;
+        //last_dist = dist;
+
+        uint32_t *tlast = &bt_nodes_[cmp_pos * 2];
+        uint32_t len_limit = MIN(wnd_size_ - cmp_pos, 32);
+        len_limit = MIN(len_limit, curblock_endpos - wpos);
+        uint8_t *pcur = &wnd_[wpos];
+        uint8_t *pmatch = &wnd_[cmp_pos];
+        uint8_t *pend = &wnd_[cmp_pos + len_limit];
+
+        uint32_t minlen = MIN(lenl, lenr);
+        uint32_t match_len = 0;
+        if (pmatch[minlen] == pcur[minlen]) {
+            while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
+                pmatch += 4; pcur += 4; }
+            if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
+                pmatch += 2; pcur += 2; }
+            if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+            match_len = (pcur - wnd_) - wpos;
+            if (match_len >= 4) {
+                if (match_len >= 24) {
+                    *l = tlast[0];
+                    *r = tlast[1];
+                    break;
+                }
+            }
+        } else {
+            pmatch += minlen;
+            pcur += minlen;
+        }
+
+        if (*pmatch  < *pcur) {
+            *l = cmp_pos;
+            cmp_pos = *(l = &tlast[1]);
+            lenl = match_len;
+        } else {
+            *r = cmp_pos;
+            cmp_pos = *(r = &tlast[0]);
+            lenr = match_len;
+        }
+    }
+    bt_start_[curhash4] = wpos;
+    }
         if (i + 128 < len) {i += 3; continue;}
 
         uint32_t curhash6 = HASH6(wnd_[pos]);
@@ -320,12 +385,14 @@ void LZ::slide_pos(uint32_t len, bool mffast)
     wnd_curpos_ += len;
 }
 
-void LZ::find_match(uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mffast) 
+void LZ::find_match(uint32_t *rep_dist, uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mffast) 
 {
     if (units->mftried)
         return;
 
     units->mftried = true;
+    units->cnt = 1;
+    units->bestidx = 0;
     units->u[0].c = wnd_[wpos];
     uint32_t curhash2 = 0;
     uint32_t curhash3 = HASH3(wnd_[wpos]);
@@ -335,8 +402,8 @@ void LZ::find_match(uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mff
     uint32_t *ht6 = &mf_ht6_[curhash6 * ht6_width_];
 
     for(uint32_t i = 0; i < 4; i++) {
-        uint32_t cmp_pos = wpos > rep_dist_[i] ? wpos - rep_dist_[i] : 
-            wpos + wnd_size_ - rep_dist_[i];
+        uint32_t cmp_pos = wpos > rep_dist[i] ? wpos - rep_dist[i] : 
+            wpos + wnd_size_ - rep_dist[i];
         if (cmp_pos >= wpos && cmp_pos < curblock_endpos) continue;
 
         uint32_t len_limit = MIN(bytes_left, wnd_size_ - cmp_pos);
@@ -352,7 +419,7 @@ void LZ::find_match(uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mff
 
         uint32_t match_len = (pcur - wnd_) - wpos;
         if (match_len == 1 && i == 0) {
-            units->u[units->cnt].type = MFUnit::ONEBYTE_MATCH;
+            units->u[units->cnt].type = MFUnit::REP0LEN1_MATCH;
             units->u[units->cnt].len = 1;
             units->u[units->cnt].rep_idx = 0; // for encoding choice
             units->cnt++;
@@ -364,6 +431,62 @@ void LZ::find_match(uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mff
             if (match_len >= GOOD_LEN_REP)
                 goto MF_INSERT;
         }
+    }
+
+    if (0)
+    {
+    uint32_t curhash4 = HASH6(wnd_[wpos]);
+    uint32_t cmp_pos = bt_start_[curhash4];
+    uint32_t *l = &bt_nodes_[wpos * 2], *r = &bt_nodes_[wpos * 2 + 1];
+    uint32_t lenl = 0, lenr = 0;
+
+    for(uint32_t i = 0; i < 16; i++) {
+        if (cmp_pos >= wpos && cmp_pos < curblock_endpos) break;
+        //if (dist < last_dist) break;
+        //last_dist = dist;
+
+        uint32_t *tlast = &bt_nodes_[cmp_pos * 2];
+        uint32_t len_limit = MIN(bytes_left, wnd_size_ - cmp_pos);
+        uint8_t *pcur = &wnd_[wpos];
+        uint8_t *pmatch = &wnd_[cmp_pos];
+        uint8_t *pend = &wnd_[cmp_pos + len_limit];
+
+        uint32_t minlen = MIN(lenl, lenr);
+        uint32_t match_len = 0;
+        if (pmatch[minlen] == pcur[minlen]) {
+            while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
+                pmatch += 4; pcur += 4; }
+            if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
+                pmatch += 2; pcur += 2; }
+            if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+            match_len = (pcur - wnd_) - wpos;
+            if (match_len >= 4) {
+                uint32_t dist = wpos > cmp_pos? wpos - cmp_pos : wpos + wnd_size_ - cmp_pos;
+                units->u[units->cnt].type = MFUnit::NORMAL_MATCH;
+                units->u[units->cnt].dist = dist;
+                units->u[units->cnt].len = match_len;
+                units->cnt++;
+                if (match_len >= 24) {
+                    *l = tlast[0];
+                    *r = tlast[1];
+                    break;
+                }
+            }
+        } else {
+            pmatch += minlen;
+            pcur += minlen;
+        }
+        if (*pmatch < *pcur) {
+            *l = cmp_pos;
+            cmp_pos = *(l = &tlast[1]);
+            lenl = match_len;
+        } else {
+            *r = cmp_pos;
+            cmp_pos = *(r = &tlast[0]);
+            lenr = match_len;
+        }
+    }
+    bt_start_[curhash4] = wpos;
     }
 
     for(uint32_t i = 0; i < ht6_width_; i++) {
@@ -475,48 +598,42 @@ MF_QINSERT:
     ht6[0] = v;
 }
 
-uint32_t LZ::encode_unit(LZ::MFUnits *units)
+uint32_t LZ::encode_unit(LZ::MFUnit *unit)
 {
-    MFUnit *unit = &units->u[units->bestidx];
-    uint32_t slen;
-    if (units->bestidx == 0) {
-        model_->EncodeLiteral(unit->c);//,wnd_curpos_-1
-        slen = 1;
-    } else {
-        slen = unit->len;
-        uint32_t dist;
-        switch (unit->type) {
-            case MFUnit::ONEBYTE_MATCH:
-                model_->Encode1BMatch();
-                slen = 1;
+    uint32_t dist;
+    switch (unit->type) {
+        case MFUnit::LITERAL:
+            model_->EncodeLiteral(unit->c);//,wnd_curpos_-1
+            break;
+        case MFUnit::REP0LEN1_MATCH:
+            model_->EncodeRep0Len1();
+            break;
+        case MFUnit::REPDIST_MATCH:
+            model_->EncodeRepDistMatch(unit->rep_idx, unit->len - 2);
+            dist = rep_dist_[unit->rep_idx];
+            switch (unit->rep_idx) {
+                case 3:
+                    rep_dist_[3] = rep_dist_[2];
+                case 2:
+                    rep_dist_[2] = rep_dist_[1];
+                case 1:
+                    rep_dist_[1] = rep_dist_[0];
+                case 0:
+                    rep_dist_[0] = dist;
                 break;
-            case MFUnit::REPDIST_MATCH:
-                model_->EncodeRepDistMatch(unit->rep_idx, unit->len - 2);
-                dist = rep_dist_[unit->rep_idx];
-                switch (unit->rep_idx) {
-                    case 3:
-                        rep_dist_[3] = rep_dist_[2];
-                    case 2:
-                        rep_dist_[2] = rep_dist_[1];
-                    case 1:
-                        rep_dist_[1] = rep_dist_[0];
-                    case 0:
-                        rep_dist_[0] = dist;
-                        break;
-                }
-                break;
-            case MFUnit::NORMAL_MATCH:
-                model_->EncodeMatch(unit->dist - 1, unit->len - 2);
-                rep_dist_[3] = rep_dist_[2];
-                rep_dist_[2] = rep_dist_[1];
-                rep_dist_[1] = rep_dist_[0];
-                rep_dist_[0] = unit->dist;
-                break;
-            default:
-                break;
-        }
+            }
+            break;
+        case MFUnit::NORMAL_MATCH:
+            model_->EncodeMatch(unit->dist - 1, unit->len - 2);
+            rep_dist_[3] = rep_dist_[2];
+            rep_dist_[2] = rep_dist_[1];
+            rep_dist_[1] = rep_dist_[0];
+            rep_dist_[0] = unit->dist;
+            break;
+        default:
+            break;
     }
-    return slen;
+    return unit->len;
 }
 
 void LZ::get_best_match(MFUnits *units) 
@@ -579,10 +696,10 @@ int LZ::compress_normal(uint32_t size, bool lazy, bool mffast)
     curblock_endpos = wnd_curpos_ + size;
 
     for(progress = 0; progress < size; ) {
-        find_match(size - progress, mfunits_ + mfpos1, wnd_curpos_, mffast);
+        find_match(rep_dist_, size - progress, mfunits_ + mfpos1, wnd_curpos_, mffast);
         get_best_match(mfunits_ + mfpos1);
         if (mfunits_[mfpos1].bestidx == 0) {
-            encode_unit(mfunits_ + mfpos1);
+            encode_unit(&mfunits_[mfpos1].u[mfunits_[mfpos1].bestidx]);
             mfunits_[mfpos1].Clear();
             progress++;
             slide_pos(1, mffast);
@@ -590,7 +707,7 @@ int LZ::compress_normal(uint32_t size, bool lazy, bool mffast)
         }
 
         if (!lazy || mfunits_[mfpos1].u[mfunits_[mfpos1].bestidx].len > 24) {
-            uint32_t slen = encode_unit(mfunits_ + mfpos1);
+            uint32_t slen = encode_unit(&mfunits_[mfpos1].u[mfunits_[mfpos1].bestidx]);
             mfunits_[mfpos1].Clear();
             progress += slen;
             slide_pos(slen, mffast);
@@ -600,18 +717,18 @@ int LZ::compress_normal(uint32_t size, bool lazy, bool mffast)
 
         // lazy parser
         uint32_t mfpos2 = (mfpos1 + 1) % 2;
-        find_match(size - progress - 1, mfunits_ + mfpos2, wnd_curpos_ + 1, mffast);
+        find_match(rep_dist_, size - progress - 1, mfunits_ + mfpos2, wnd_curpos_ + 1, mffast);
         get_best_match(mfunits_ + mfpos2);
         if (match_second_better(mfunits_ + mfpos1, mfunits_ + mfpos2)) {
             // choose literal output
             mfunits_[mfpos1].bestidx = 0;
-            encode_unit(mfunits_ + mfpos1);
+            encode_unit(&mfunits_[mfpos1].u[mfunits_[mfpos1].bestidx]);
             progress += 1;
             slide_pos(1, mffast);
             mfunits_[mfpos1].Clear();
             mfpos1 = mfpos2;
         } else {
-            uint32_t slen = encode_unit(mfunits_ + mfpos1);
+            uint32_t slen = encode_unit(&mfunits_[mfpos1].u[mfunits_[mfpos1].bestidx]);
             progress += slen;
             slide_pos(slen, mffast);
             model_->SetLiteralCtx(wnd_[wnd_curpos_ - 1]);
@@ -628,8 +745,191 @@ int LZ::compress_fast(uint32_t size)
     return 0;
 }
 
-int LZ::compress_optimal(uint32_t size)
+int LZ::compress_advanced(uint32_t size)
 {
+    uint32_t apend = 0, apcur = 0;
+    curblock_endpos = wnd_curpos_ + size;
+
+    for(uint32_t i = 0; i < size; ) {
+        mfunits_[0].Clear();
+        find_match(rep_dist_, size - i, &mfunits_[0], wnd_curpos_, false);
+        get_best_match(&mfunits_[0]);
+        MFUnit *u = &mfunits_[0].u[mfunits_[0].bestidx];
+        if (u->type == MFUnit::LITERAL) {
+            model_->EncodeLiteral(u->c);
+            i++;
+            slide_pos(1, false);
+        } else {
+            apcur = 0;
+            apend = 1;
+            apunits_[0].price = 0;
+            apunits_[0].back_pos = 0;
+            apunits_[0].rep_dist[0] = rep_dist_[0];
+            apunits_[0].rep_dist[1] = rep_dist_[1];
+            apunits_[0].rep_dist[2] = rep_dist_[2];
+            apunits_[0].rep_dist[3] = rep_dist_[3];
+            apunits_[0].state = model_->state_;
+            uint32_t aplimit = MIN(AP_LIMIT, size - i);
+            for(;;) {
+                apunits_[apcur].lit = wnd_[wnd_curpos_];
+                // fix cur state
+                if (apcur) {
+                    int l = apunits_[apcur].back_pos;
+                    if (apunits_[apcur].dist == 0) {
+                        apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[0];
+                        apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[1];
+                        apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[2];
+                        apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[3];
+                        apunits_[apcur].state = (apunits_[l].state * 4) & 0x3F;
+                    } else if (apunits_[apcur].dist <= 4) {
+                        uint32_t len = apcur - l;
+                        if (len == 1 && apunits_[apcur].dist == 1) {
+                            apunits_[apcur].state = (apunits_[l].state * 4 + 2) & 0x3F;
+                            apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[0];
+                            apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[1];
+                            apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[2];
+                            apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[3];
+                        } else {
+                            apunits_[apcur].state = (apunits_[l].state * 4 + 3) & 0x3F;
+                            if (apunits_[apcur].dist == 1) {
+                                apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[0];
+                                apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[1];
+                                apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[2];
+                                apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[3];
+                            } else if (apunits_[apcur].dist == 2) {
+                                apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[1];
+                                apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[0];
+                                apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[2];
+                                apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[3];
+                            } else if (apunits_[apcur].dist == 3) {
+                                apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[2];
+                                apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[0];
+                                apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[1];
+                                apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[3];
+                            } else {
+                                apunits_[apcur].rep_dist[0] = apunits_[l].rep_dist[3];
+                                apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[0];
+                                apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[1];
+                                apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[2];
+                            }
+                       }
+                    } else {
+                        apunits_[apcur].state = (apunits_[l].state * 4 + 1) & 0x3F;
+                        apunits_[apcur].rep_dist[0] = apunits_[apcur].dist- 4;
+                        apunits_[apcur].rep_dist[1] = apunits_[l].rep_dist[0];
+                        apunits_[apcur].rep_dist[2] = apunits_[l].rep_dist[1];
+                        apunits_[apcur].rep_dist[3] = apunits_[l].rep_dist[2];
+                    }
+
+                    mfunits_[0].Clear();
+                    find_match(apunits_[apcur].rep_dist, size - i - apcur, &mfunits_[0], wnd_curpos_, false);
+                    get_best_match(&mfunits_[0]);
+                    u = &mfunits_[0].u[mfunits_[0].bestidx];
+                }
+
+                if (apcur == aplimit) {
+                    ap_backward(apcur);
+                    rep_dist_[0] = apunits_[apcur].rep_dist[0];
+                    rep_dist_[1] = apunits_[apcur].rep_dist[1];
+                    rep_dist_[2] = apunits_[apcur].rep_dist[2];
+                    rep_dist_[3] = apunits_[apcur].rep_dist[3];
+                    i += apcur;
+                    break;
+                }
+
+                if (apcur + 1 >= apend) 
+                    apunits_[apend++].price = 0xFFFFFFFF;
+
+                uint32_t lit_ctx = wnd_curpos_? wnd_[wnd_curpos_ - 1] : 0;
+                uint32_t cprice = model_->GetLiteralPrice(apunits_[apcur].state, lit_ctx, wnd_[wnd_curpos_]);
+                if (cprice + apunits_[apcur].price < apunits_[apcur + 1].price) {
+                    apunits_[apcur + 1].dist = 0;
+                    apunits_[apcur + 1].back_pos = apcur;
+                    apunits_[apcur + 1].price = cprice + apunits_[apcur].price;
+                }
+
+                if (u->type == MFUnit::REP0LEN1_MATCH || (u->type == MFUnit::REPDIST_MATCH && u->rep_idx == 0)) {
+                    cprice = model_->GetRep0Len1Price(apunits_[apcur].state);
+                    if (cprice + apunits_[apcur].price < apunits_[apcur + 1].price) {
+                        apunits_[apcur + 1].dist = 1;
+                        apunits_[apcur + 1].back_pos = apcur;
+                        apunits_[apcur + 1].price = cprice + apunits_[apcur].price;
+                    }
+                }
+
+                if (u->len > 24 || (u->len > 1 && u->len + apcur >= aplimit)) {
+                    ap_backward(apcur);
+                    rep_dist_[0] = apunits_[apcur].rep_dist[0];
+                    rep_dist_[1] = apunits_[apcur].rep_dist[1];
+                    rep_dist_[2] = apunits_[apcur].rep_dist[2];
+                    rep_dist_[3] = apunits_[apcur].rep_dist[3];
+                    encode_unit(u);
+                    i += apcur + u->len;
+                    slide_pos(u->len, false);
+                    model_->SetLiteralCtx(wnd_[wnd_curpos_ - 1]);
+                    break;
+                }
+                    
+                uint32_t len = u->len;
+                while(len > 1) {
+
+                    while (apcur + len >= apend) 
+                        apunits_[apend++].price = 0xFFFFFFFF;
+
+                if ((len == 2 && u->dist >= 64)
+                 || (len == 3 && u->dist >= 64 * 16)
+                 || (len <= 6 && u->dist >= 64 *(1 << (4 * (len - 2))))
+                 )
+                    break;
+
+
+                    uint32_t tmpdist = u->dist;
+                    if (u->type == MFUnit::REPDIST_MATCH) {
+                        cprice = model_->GetRepDistMatchPrice(apunits_[apcur].state, u->dist, len - 2);
+                        tmpdist++;
+                    } else {
+                        cprice = model_->GetMatchPrice(apunits_[apcur].state, u->dist - 1, len - 2);
+                        tmpdist += 4;
+                    }
+
+                    if (cprice + apunits_[apcur].price < apunits_[apcur + len].price) {
+                        apunits_[apcur + len].dist = tmpdist;
+                        apunits_[apcur + len].back_pos = apcur;
+                        apunits_[apcur + len].price = cprice + apunits_[apcur].price;
+                    }
+                    len--;
+                }
+                apcur++;
+                slide_pos(1, false);
+            }
+        }
+    }
     return 0;
 }
+
+void LZ::ap_backward(int end)
+{
+    for(int i = end; i; ) {
+        apunits_[apunits_[i].back_pos].next_pos = i;
+        i = apunits_[i].back_pos;
+    }
+
+    for(int i = 0; i != end; ) {
+        uint32_t next = apunits_[i].next_pos;
+        if (apunits_[next].dist == 0) {
+            model_->EncodeLiteral(apunits_[i].lit);
+        } else if (apunits_[next].dist <= 4) {
+            if (next - i == 1 && apunits_[next].dist == 1)
+                model_->EncodeRep0Len1();
+            else  
+                model_->EncodeRepDistMatch(apunits_[next].dist - 1, next - i - 2);
+            model_->SetLiteralCtx(apunits_[next - 1].lit);
+        } else {
+            model_->EncodeMatch(apunits_[next].dist - 5, next - i - 2);
+            model_->SetLiteralCtx(apunits_[next - 1].lit);
+        }
+        i = next;
+    }
+}
+
 

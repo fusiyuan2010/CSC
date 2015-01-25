@@ -5,7 +5,7 @@
 
 #define HASH6(a) (((*(uint32_t*)(&a)^(*(uint16_t*)((&a)+4)<<13))*2654435761u)>>(32-ht6_bits_))
 #define HASH5(a) (((*(uint32_t*)(&a)^(*(uint16_t*)((&a)+3)<<13))*2654435761u)>>(32-21))
-#define HASH4(a) (((*(uint32_t*)(&a))*2654435761u)>>(32 - 18))
+#define HASH4(a) (((*(uint32_t*)(&a))*2654435761u)>>(32 - ht6_bits_))
 #define HASH3(a) (((a)<<8)^(*((&a)+1)<<5)^(*((&a)+2)))
 #define HASH2(a) (*(uint16_t*)&a)
 
@@ -54,7 +54,7 @@ private:
     uint32_t *mf_ht4_;
     uint32_t *mf_ht5_;
     uint32_t *mf_ht6_;
-    static const int HT6_SIZE_LIMIT = 16;
+    static const int HT6_SIZE_LIMIT = 33;
     uint32_t *mf_ht6raw_;
     uint32_t rep_dist_[4];
     uint32_t rep_matchlen_;
@@ -63,6 +63,14 @@ private:
     uint32_t wnd_size_;
     uint32_t LZMinBlockSkip(uint32_t size,uint32_t type);
     uint32_t curblock_endpos;
+
+    // bt mf
+    static const int BT_TREE_NUM = 4 * MB;
+    static const int BT_GOOD_LEN = 32;
+    uint32_t *bt_nodes_;
+    uint32_t *bt_start_;
+    //
+
 
 // New LZ77 Algorithm===============================
     int LZMinBlockNew(uint32_t size,uint32_t TryLazy,uint32_t LazyStep,uint32_t GoodLen);
@@ -116,7 +124,7 @@ private:
         enum {
             // units array at pos 0 is always literal
             LITERAL,
-            ONEBYTE_MATCH,
+            REP0LEN1_MATCH,
             REPDIST_MATCH,
             NORMAL_MATCH,
         } type;
@@ -127,6 +135,7 @@ private:
             uint32_t dist;
             uint32_t rep_idx;
         };
+        uint32_t price;
     };
 
     struct MFUnits {
@@ -139,21 +148,35 @@ private:
 
         void Clear() {
             mftried = false;
-            cnt = 1;
-            bestidx = 0;
         }
     };
 
     MFUnits mfunits_[2];
+
+// ============== OPTIMAL ====
+    struct APUnit {
+        uint32_t dist;
+        uint32_t state;
+        int back_pos;
+        int next_pos;
+        uint32_t price;
+        uint32_t lit;
+        uint32_t rep_dist[4];
+    };
+// ===========================
+    static const int AP_LIMIT = 2048;
+    APUnit apunits_[AP_LIMIT + 1];
+
     int compress_normal(uint32_t size, bool lazy, bool mffast);
-    uint32_t encode_unit(LZ::MFUnits *units);
-    void find_match(uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mffast) ;
+    uint32_t encode_unit(LZ::MFUnit *unit);
+    void find_match(uint32_t *rep_dist, uint32_t bytes_left, MFUnits *units, uint32_t wpos, bool mffast) ;
     void slide_pos(uint32_t len, bool mffast);
 
     int match_second_better(MFUnits *units1, MFUnits *units2);
     void get_best_match(MFUnits *units);
     int compress_fast(uint32_t size);
-    int compress_optimal(uint32_t size);
+    int compress_advanced(uint32_t size);
+    void ap_backward(int idx);
 
 };
 

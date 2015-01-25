@@ -106,6 +106,7 @@ void Model::Reset(void)
     p_rle_flag_ = 2048;
     state_ = 0;    
     ctx_ = 0;
+    lp_rebuild_int_ = 0;
 }
 
 void Model::encode_matchlen_1(uint32_t len)
@@ -156,9 +157,18 @@ void Model::encode_matchlen_2(uint32_t len)
     encode_matchlen_1(len);
 }
 
+#define FEncodeBit(price,v,p) do\
+{\
+	if (v)\
+		price += p_2_bits_[p>>3];\
+	else\
+		price += p_2_bits_[(4096-p)>>3];\
+}while(0)
+
 void Model::EncodeLiteral(uint32_t c)//,uint32_t pos
 {
     PEncodeLiteral(c);
+    //printf("[%u](%u)\n", c, ctx_);
     EncodeBit(coder_, 0, p_state_[state_ * 3 + 0]);
 
     state_ = (state_ * 4) & 0x3F;
@@ -171,10 +181,23 @@ void Model::EncodeLiteral(uint32_t c)//,uint32_t pos
     } while (c < 0x10000);
 }
 
+uint32_t Model::GetLiteralPrice(uint32_t fstate, uint32_t fctx, uint32_t c)
+{
+	uint32_t ret = 0;
+    FEncodeBit(ret, 0, p_state_[fstate * 3 + 0]);
+    uint32_t *p = &p_lit_[fctx * 256];
+    c = c | 0x100;
+    do {
+        FEncodeBit(ret, (c >> 7) & 1, p[c>>8]);
+        c <<= 1;
+    } while (c < 0x10000);
+    return ret;
+}
 
-void Model::Encode1BMatch(void)
+void Model::EncodeRep0Len1(void)
 {
     PEncode1BMatch();
+    //printf("Rep0Len1\n");
     EncodeBit(coder_, 1, p_state_[state_ *3 + 0]);
     EncodeBit(coder_, 0, p_state_[state_ *3 + 1]);
     EncodeBit(coder_, 0, p_state_[state_ *3 + 2]);
@@ -182,20 +205,90 @@ void Model::Encode1BMatch(void)
     state_ = (state_ * 4 + 2) & 0x3F;
 }
 
+uint32_t Model::GetRep0Len1Price(uint32_t fstate)
+{
+	uint32_t ret = 0;
+    FEncodeBit(ret, 1, p_state_[fstate *3 + 0]);
+    FEncodeBit(ret, 0, p_state_[fstate *3 + 1]);
+    FEncodeBit(ret, 0, p_state_[fstate *3 + 2]);
+    return ret;
+}
 
-void Model::EncodeRepDistMatch(uint32_t repIndex,uint32_t match_len)
+void Model::EncodeRepDistMatch(uint32_t rep_idx, uint32_t match_len)
 {
     PEncodeRepMatch(match_len, repIndex);
+    //printf("Rep %u %u\n", rep_idx, match_len);
     EncodeBit(coder_, 1, p_state_[state_ *3 + 0]);
     EncodeBit(coder_, 0, p_state_[state_ *3 + 1]);
     EncodeBit(coder_, 1, p_state_[state_ *3 + 2]);
 
     uint32_t i = 1, j;
-    j = (repIndex >> 1) & 1; EncodeBit(coder_, j, p_repdist_[state_ * 3 + i - 1]); i += i + j;
-    j = repIndex & 1; EncodeBit(coder_, j, p_repdist_[state_ * 3 + i - 1]); 
+    j = (rep_idx >> 1) & 1; EncodeBit(coder_, j, p_repdist_[state_ * 3 + i - 1]); i += i + j;
+    j = rep_idx & 1; EncodeBit(coder_, j, p_repdist_[state_ * 3 + i - 1]); 
 
     encode_matchlen_2(match_len);
     state_ = (state_ * 4 + 3) & 0x3F;
+}
+
+void Model::len_price_rebuild()
+{
+    for(int i = 0; i < 32; i++) {
+        uint32_t ret = 0, len = i;
+        uint32_t *p;
+        if (len < 16) {
+            if (len < 8) {
+                FEncodeBit(ret , 0, p_matchlen_slot_[0]);
+                p = p_matchlen_extra1_;
+            } else {
+                FEncodeBit(ret , 1, p_matchlen_slot_[0]);
+                FEncodeBit(ret , 0, p_matchlen_slot_[1]);
+                len -= 8;
+                p = p_matchlen_extra2_;
+            }
+
+            uint32_t c = len | 0x08;
+            do {
+                FEncodeBit(ret, (c >> 2) & 1, p[c >> 3]);
+                c <<= 1;
+            } while (c < 0x40);
+        } else {
+            FEncodeBit(ret, 1, p_matchlen_slot_[0]);
+            FEncodeBit(ret, 1, p_matchlen_slot_[1]);
+            len -= 16;
+
+            p = p_matchlen_extra3_;
+            uint32_t c = len | 0x80;
+            do {
+                FEncodeBit(ret, (c >> 6) & 1, p[c >> 7]);
+                c <<= 1;
+            } while (c < 0x4000);
+        }
+        len_price_[i] = ret;
+    }
+    lp_rebuild_int_ = 2048;
+}
+
+
+uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t matchLen)
+{
+	uint32_t ret = 0;
+    FEncodeBit(ret, 1, p_state_[fstate *3 + 0]);
+    FEncodeBit(ret, 0, p_state_[fstate *3 + 1]);
+    FEncodeBit(ret, 1, p_state_[fstate *3 + 2]);
+
+    uint32_t i = 1, j;
+    j = (repIndex >> 1) & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); i += i + j;
+    j = repIndex & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); 
+
+    if (matchLen >= 32)
+        //long enough, some random reasonable price 
+        ret += 128 * 6; 
+    else {
+        if (lp_rebuild_int_-- == 0)
+            len_price_rebuild();
+        ret += len_price_[matchLen];
+    }
+    return ret;
 }
 
 void Model::EncodeMatch(uint32_t dist, uint32_t len)
@@ -265,6 +358,34 @@ void Model::EncodeMatch(uint32_t dist, uint32_t len)
     state_ = (state_ * 4 + 1) & 0x3F;
 }
 
+uint32_t Model::GetMatchPrice(uint32_t fstate, uint32_t dist, uint32_t len)
+{
+    uint32_t ret = 0;
+    FEncodeBit(ret, 1,p_state_[fstate * 3 + 0]);
+    FEncodeBit(ret, 1,p_state_[fstate * 3 + 1]);
+    if (len >= 32)
+        //long enough, some random reasonable price 
+        ret += 128 * 6; 
+    else {
+        if (lp_rebuild_int_-- == 0)
+            len_price_rebuild();
+        ret += len_price_[len];
+    }
+
+    // quick estimation, 4bit for slot + extrabits
+    uint32_t l = 0, r = 32;
+    while(l + 1 < r) {
+        uint32_t mid = (l + (r - l) / 2);
+        if (dist_table_[mid] > dist) 
+            r = mid;
+        else if (dist_table_[mid] < dist) 
+            l = mid;
+        else 
+            l = r = mid;
+    }
+    ret += (l > 2? l + 2 : 2) * 128;
+    return ret;
+}
 
 void Model::EncodeInt(uint32_t num,uint32_t bits)
 {

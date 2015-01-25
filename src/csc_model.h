@@ -51,6 +51,10 @@ class Model
     void encode_matchlen_2(uint32_t len);
     void encode_matchdist(uint32_t dist);
 
+    uint32_t len_price_[32];
+    void len_price_rebuild();
+    uint32_t lp_rebuild_int_;
+
 public:
     Coder *coder_;
 
@@ -68,7 +72,7 @@ public:
     void EncodeRepDistMatch(uint32_t repIndex,uint32_t matchLen);
 
 
-    void Encode1BMatch(void);
+    void EncodeRep0Len1(void);
     void CompressDelta(uint8_t *src,uint32_t size);
     //void DecompressDelta(uint8_t *dst,uint32_t *size);
 
@@ -84,13 +88,15 @@ public:
     void EncodeInt(uint32_t num,uint32_t bits);
 
     uint32_t p_state_[4*4*4*3];//Original [64][3]
+    // public for advanced parser 
     uint32_t state_;
 
     //Fake Encode --- to get price
     uint32_t GetLiteralPrice(uint32_t fstate,uint32_t fctx,uint32_t c);
-    uint32_t Get1BMatchPrice(uint32_t fstate);
+    uint32_t GetRep0Len1Price(uint32_t fstate);
     uint32_t GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t matchLen);
     uint32_t GetMatchPrice(uint32_t fstate,uint32_t matchDist,uint32_t matchLen);
+
 
 private:
     uint32_t p_rle_flag_;
@@ -98,6 +104,7 @@ private:
 
     // prob of literals
     uint32_t *p_lit_;//[256][256]
+    uint32_t ctx_;
     uint32_t *p_delta_;
 
     uint32_t p_repdist_[64 * 4];
@@ -111,7 +118,6 @@ private:
     // prob to bits num
     uint32_t p_2_bits_[4096>>3];
 
-    uint32_t ctx_;
     uint32_t p_matchlen_slot_[2];
     uint32_t p_matchlen_extra1_[8];
     uint32_t p_matchlen_extra2_[8];
