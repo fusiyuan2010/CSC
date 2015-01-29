@@ -216,7 +216,7 @@ uint32_t Model::GetRep0Len1Price(uint32_t fstate)
 
 void Model::EncodeRepDistMatch(uint32_t rep_idx, uint32_t match_len)
 {
-    PEncodeRepMatch(match_len, repIndex);
+    PEncodeRepMatch(match_len, rep_idx);
     //printf("Rep %u %u\n", rep_idx, match_len);
     EncodeBit(coder_, 1, p_state_[state_ *3 + 0]);
     EncodeBit(coder_, 0, p_state_[state_ *3 + 1]);
@@ -265,11 +265,11 @@ void Model::len_price_rebuild()
         }
         len_price_[i] = ret;
     }
-    lp_rebuild_int_ = 2048;
+    lp_rebuild_int_ = 4096;
 }
 
 
-uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t matchLen)
+uint32_t Model::GetRepDistPrice(uint32_t fstate,uint32_t rep_idx)
 {
 	uint32_t ret = 0;
     FEncodeBit(ret, 1, p_state_[fstate *3 + 0]);
@@ -277,9 +277,15 @@ uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t 
     FEncodeBit(ret, 1, p_state_[fstate *3 + 2]);
 
     uint32_t i = 1, j;
-    j = (repIndex >> 1) & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); i += i + j;
-    j = repIndex & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); 
+    j = (rep_idx >> 1) & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); i += i + j;
+    j = rep_idx & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); 
+    return ret;
+}
 
+uint32_t Model::GetMatchLenPrice(uint32_t fstate,uint32_t matchLen)
+{
+    uint32_t ret = 0;
+    (void)fstate;
     if (matchLen >= 32)
         //long enough, some random reasonable price 
         ret += 128 * 6; 
@@ -294,7 +300,7 @@ uint32_t Model::GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t 
 void Model::EncodeMatch(uint32_t dist, uint32_t len)
 {
     //printf("%u %u\n", dist, len);
-    PEncodeMatch(dist, len);
+    PEncodeMatch(len, dist);
     EncodeBit(coder_, 1,p_state_[state_ * 3 + 0]);
     EncodeBit(coder_, 1,p_state_[state_ * 3 + 1]);
     encode_matchlen_2(len);
@@ -358,19 +364,11 @@ void Model::EncodeMatch(uint32_t dist, uint32_t len)
     state_ = (state_ * 4 + 1) & 0x3F;
 }
 
-uint32_t Model::GetMatchPrice(uint32_t fstate, uint32_t dist, uint32_t len)
+uint32_t Model::GetMatchDistPrice(uint32_t fstate, uint32_t dist)
 {
     uint32_t ret = 0;
     FEncodeBit(ret, 1,p_state_[fstate * 3 + 0]);
     FEncodeBit(ret, 1,p_state_[fstate * 3 + 1]);
-    if (len >= 32)
-        //long enough, some random reasonable price 
-        ret += 128 * 6; 
-    else {
-        if (lp_rebuild_int_-- == 0)
-            len_price_rebuild();
-        ret += len_price_[len];
-    }
 
     // quick estimation, 4bit for slot + extrabits
     uint32_t l = 0, r = 32;

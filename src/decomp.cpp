@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
 
     CSCDecProps p;
     unsigned char buf[CSC_PROP_SIZE];
-    fread(buf, 1, CSC_PROP_SIZE, fin);
+    (void)fread(buf, 1, CSC_PROP_SIZE, fin);
     CSCDec_ReadProperties(&p, buf);
     CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&isss);
     CSCDec_Decode(h, (ISeqOutStream*)&osss, &prog);

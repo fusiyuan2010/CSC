@@ -94,8 +94,9 @@ public:
     //Fake Encode --- to get price
     uint32_t GetLiteralPrice(uint32_t fstate,uint32_t fctx,uint32_t c);
     uint32_t GetRep0Len1Price(uint32_t fstate);
-    uint32_t GetRepDistMatchPrice(uint32_t fstate,uint32_t repIndex,uint32_t matchLen);
-    uint32_t GetMatchPrice(uint32_t fstate,uint32_t matchDist,uint32_t matchLen);
+    uint32_t GetRepDistPrice(uint32_t fstate,uint32_t repIndex);
+    uint32_t GetMatchDistPrice(uint32_t fstate,uint32_t matchDist);
+    uint32_t GetMatchLenPrice(uint32_t fstate,uint32_t matchLen);
 
 
 private:

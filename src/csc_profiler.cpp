@@ -60,7 +60,7 @@ void PEncode1BMatch()
 
 void PWriteLog()
 {
-    printf("Literal %u: \n%s\n\n\n\n", lits_cnt, lits.c_str());
+    printf("Literal %u: \n\n\n\n\n", lits_cnt, lits.c_str());
     for(int i = 0; i < 4; i++)
         printf("Rep Match idx %d cnt: %u\n", i, repmatch_idx_cnt[i]);
     printf("Match cnt: %u\n", repmatch_idx_cnt[4]);

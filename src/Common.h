@@ -14,8 +14,7 @@ const uint32_t MinBlockSize=8*KB;
 const uint32_t MaxChunkBits=21;
 const uint32_t MaxChunkSize=(1<<(MaxChunkBits-1));
 const uint32_t MaxDictSize=512*MB;//Don't change
-const uint32_t DefaultOutStreamBlockSize=128*KB;
-const uint32_t DefaultInBufferSize=MaxChunkSize;  //Should >=MaxChunkSize
+
 #define DLT_CHANNEL_MAX 5
 const uint32_t DltIndex[DLT_CHANNEL_MAX]={1,2,3,4,8};
 
@@ -28,6 +27,8 @@ const uint32_t DltIndex[DLT_CHANNEL_MAX]={1,2,3,4,8};
 #define ENCODE 1
 #define	DECODE 2
 
+
+#define GOOD_LEN 32
 
 /*****ERRORS*****************/
 #define NO_ERROR 0

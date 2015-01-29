@@ -5,9 +5,7 @@
 CSCSettings::CSCSettings()
 {
     wndSize=32*MB;
-    //outStreamBlockSize=DefaultOutStreamBlockSize;
     maxSuccBlockSize=MaxChunkSize;
-    InBufferSize=DefaultInBufferSize;
     SetDefaultMethod(2);
 }
 

@@ -132,6 +132,7 @@ class CSCDecoder
 
     uint32_t decode_literal() {
         uint32_t i = 1, *p;
+        //uint32_t lctx = ctx_;
         p = &p_lit_[ctx_ * 256];
         do { 
             DecodeBit(this, i, p[i]);

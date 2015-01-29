@@ -13,11 +13,11 @@ struct CSCInstance
 
 void CSCEncProps_Init(CSCEncProps *p)
 {
-    p->dict_size = 512 * MB;
+    p->dict_size = 100 * MB;
     p->hash_bits = 24;
-    p->hash_width = 4;
-    p->lz_mode = 1;
-    p->DLTFilter = 1;
+    p->hash_width = 1;
+    p->lz_mode = 3;
+    p->DLTFilter = 0;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
     p->csc_blocksize = 32 * KB;
