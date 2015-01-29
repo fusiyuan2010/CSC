@@ -9,7 +9,7 @@ CFLAGS=-Wall -Wno-format -fPIC $(OPT) $(DEBUG) $(TEST) -D_7Z_TYPES_
 CC=g++
 INCLUDE_PATH = -I ./
 
-OBJS=csc_analyzer.o csc_encoder_main.o csc_coder.o csc_fake_coder.o csc_filters.o csc_lz.o csc_lz_optimal.o csc_memio.o csc_enc.o csc_dec.o csc_model.o csc_profiler.o
+OBJS=csc_analyzer.o csc_encoder_main.o csc_coder.o csc_filters.o csc_lz.o csc_memio.o csc_enc.o csc_dec.o csc_model.o csc_profiler.o csc_mf.o
 
 LIBOUTPUT=csc.a
 

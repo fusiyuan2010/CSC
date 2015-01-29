@@ -16,7 +16,7 @@ void CSCEncProps_Init(CSCEncProps *p)
     p->dict_size = 100 * MB;
     p->hash_bits = 24;
     p->hash_width = 1;
-    p->lz_mode = 3;
+    p->lz_mode = 2;
     p->DLTFilter = 0;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
