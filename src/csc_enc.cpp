@@ -11,41 +11,108 @@ struct CSCInstance
     uint32_t raw_blocksize;
 };
 
-void CSCEncProps_Init(CSCEncProps *p)
+void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
 {
-    p->dict_size = 100 * MB;
-    p->hash_bits = 24;
-    p->hash_width = 1;
-    p->lz_mode = 2;
-    p->DLTFilter = 0;
+    if (dict_size < 32 * KB) dict_size = 32 * KB;
+    if (dict_size > 1024 * MB) dict_size = 1024 * MB;
+    if (level < 1) level = 1;
+    if (level > 5) level = 5;
+    p->dict_size = dict_size;
+    p->DLTFilter = 1;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
     p->csc_blocksize = 32 * KB;
     p->raw_blocksize = 1 * MB;
+
+    uint32_t hbits = 20;
+    if (dict_size < MB)
+        hbits = 19;
+    else if (dict_size <= 4 * MB) 
+        hbits = 20;
+    else if (dict_size <= 16 * MB) 
+        hbits = 21;
+    else if (dict_size <= 64 * MB) 
+        hbits = 22;
+    else if (dict_size <= 256 * MB) 
+        hbits = 23;
+    else
+        hbits = 24;
+
+    if (dict_size <= 16 * MB) 
+        p->bt_size = dict_size;
+    else if (dict_size <= 64 * MB) 
+        p->bt_size = (dict_size - 16 * MB) / 2 + 16 * MB;
+    else if (dict_size <= 256 * MB) 
+        p->bt_size = (dict_size - 64 * MB) / 4 + 40 * MB;
+    else
+        p->bt_size = (dict_size - 256 * MB) / 8 + 88 * MB;
+
+    p->good_len = 32;
+    p->hash_bits = p->bt_hash_bits = hbits;
+    switch (level) {
+        case 1:
+            p->hash_width = 2;
+            p->lz_mode = 1;
+            p->bt_size = 0;
+            p->hash_bits++;
+            break;
+        case 2:
+            p->hash_width = 8;
+            p->lz_mode = 2;
+            p->bt_size = 0;
+            break;
+        case 3:
+            p->hash_width = 2;
+            p->lz_mode = 3;
+            p->bt_size = 0;
+            p->good_len = 18;
+            p->hash_bits++;
+            break;
+        case 4:
+            p->hash_width = 2;
+            p->lz_mode = 3;
+            p->bt_cyc = 16;
+            p->good_len = 24;
+            break;
+        case 5:
+            p->hash_width = 4;
+            p->lz_mode = 3;
+            p->good_len = 48;
+            p->bt_cyc = 32;
+            break;
+    }
+
+    if (p->bt_size == dict_size) {
+        p->hash_width = 0;
+    }
 }
 
-CSCEncHandle CSCEnc_Create(const CSCEncProps *props, 
+uint64_t CSCEnc_EstMemUsage(const CSCProps *p)
+{
+    uint64_t ret = 0;
+    ret += p->dict_size;
+    ret += p->csc_blocksize * 2;
+    if (p->bt_size) 
+        ret += ((1 << p->bt_hash_bits) + 2 * p->bt_size) * sizeof(uint32_t);
+    if (p->hash_width)
+        ret += (p->hash_width * (1 << p->hash_bits)) * sizeof(uint32_t);
+    ret += 128 * KB *sizeof(uint32_t);
+    ret += 256 * 256 * sizeof(uint32_t);
+    ret += 2 * MB;
+    return ret;
+}
+
+CSCEncHandle CSCEnc_Create(const CSCProps *props, 
         ISeqOutStream *outstream)
 {
-    CSCSettings setting;
-    setting.wndSize = props->dict_size;
-    setting.hashBits = props->hash_bits;
-    setting.hashWidth = props->hash_width;
-    setting.lzMode = props->lz_mode;
-    setting.EXEFilter = props->EXEFilter;
-    setting.DLTFilter = props->DLTFilter;
-    setting.TXTFilter = props->TXTFilter;
-    setting.outStreamBlockSize = props->csc_blocksize;
-
     CSCInstance *csc = new CSCInstance();
 
     csc->io = new MemIO();
     csc->io->Init(outstream, props->csc_blocksize);
     csc->raw_blocksize = props->raw_blocksize;
-    setting.io = csc->io;
 
     csc->encoder = new CSCEncoder();
-    csc->encoder->Init(setting);
+    csc->encoder->Init(props, csc->io);
     return (void*)csc;
 }
 
@@ -58,8 +125,9 @@ void CSCEnc_Destroy(CSCEncHandle p)
     delete csc;
 }
 
-void CSCEnc_WriteProperties(const CSCEncProps *props, uint8_t *s)
+void CSCEnc_WriteProperties(const CSCProps *props, uint8_t *s, int full)
 {
+    (void)full;
     s[0] = ((props->dict_size >> 24) & 0xff);
     s[1] = ((props->dict_size >> 16) & 0xff);
     s[2] = ((props->dict_size >> 8) & 0xff);

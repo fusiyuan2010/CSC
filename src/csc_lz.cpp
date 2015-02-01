@@ -2,45 +2,41 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <csc_common.h>
 #include <csc_coder.h>
 #include <csc_model.h>
 #include <csc_lz.h>
 #include <stdio.h>
 
-int LZ::Init(uint32_t WindowSize)
+int LZ::Init(const CSCProps *p, Model *model)
 {
-    return Init(WindowSize, 22, 1);
-}
+    model_ = model;
 
-int LZ::Init(uint32_t WindowSize, uint32_t hashBits,uint32_t hashWidth)
-{
-    wnd_size_=WindowSize;
+    wnd_size_ = p->dict_size;
 
-    if(wnd_size_<32*KB)
-        wnd_size_=32*KB;
-    if(wnd_size_>MaxDictSize)
-        wnd_size_=MaxDictSize;
+    if(wnd_size_ < MinDictSize) wnd_size_ = MinDictSize;
+    if(wnd_size_ > MaxDictSize) wnd_size_ = MaxDictSize;
 
-    wnd_ = NULL;
-    wnd_=(uint8_t*)malloc(wnd_size_ + 8);
+    wnd_ = (uint8_t*)malloc(wnd_size_ + 8);
     if (!wnd_)
         goto FREE_ON_ERROR;
 
-    if (mf_.Init(wnd_, wnd_size_, 64 * MB, 22, 2, 23))
+    if (mf_.Init(wnd_, wnd_size_, p->bt_size, p->bt_hash_bits, 
+                p->hash_width, p->hash_bits))
         goto FREE_ON_ERROR;
 
-    good_len_ = 48;
-    mf_.SetArg(48, 48, good_len_);
+    good_len_ = p->good_len;
+    bt_cyc_ = p->bt_cyc;
+    ht_cyc_ = p->hash_width;
+    mf_.SetArg(bt_cyc_, ht_cyc_, 1, good_len_);
     appt_ = (MFUnit *)malloc(sizeof(MFUnit) * good_len_ + 1);
 
     Reset();
-    memset(wnd_,0,wnd_size_);
-    return NO_ERROR;
+    return 0;
 
 FREE_ON_ERROR:
-    SAFEFREE(wnd_);
+    free(wnd_);
     return CANT_ALLOC_MEM;
-    
 }
 
 
@@ -51,14 +47,14 @@ void LZ::Reset(void)
         rep_dist_[1] =
         rep_dist_[2] =
         rep_dist_[3] = wnd_size_;
-
+    memset(wnd_, 0, wnd_size_ + 8);
     model_->Reset();
 }
 
 void LZ::Destroy(void)
 {
     mf_.Destroy();
-    SAFEFREE(wnd_);
+    free(wnd_);
 }
 
 void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
@@ -68,42 +64,45 @@ void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
         cur_block_size = MIN(wnd_size_ - wnd_curpos_, size - i);
         cur_block_size = MIN(cur_block_size, MinBlockSize);
         memcpy(wnd_ + wnd_curpos_, src + i, cur_block_size);
-        if (lz_mode == 0) // fast, with no lazy parser
+        if (lz_mode == 1) // fast, with no lazy parser
             compress_normal(cur_block_size, false);
-        else if (lz_mode == 1)
-            compress_normal(cur_block_size, true);
         else if (lz_mode == 2)
+            compress_normal(cur_block_size, true);
+        else if (lz_mode == 3)
             compress_advanced(cur_block_size);
+        else if (lz_mode == 4) {
+            mf_.SetArg(1, 1, 0, good_len_);
+            compress_normal(cur_block_size, false);
+            mf_.SetArg(bt_cyc_, ht_cyc_, 1, good_len_);
+        } else if (lz_mode == 5) {
+            // only copy the block data to window and put it into MF
+            // No encoded output 
+            mf_.SetArg(1, 1, 0, good_len_);
+            compress_mf_skip(cur_block_size);
+            mf_.SetArg(bt_cyc_, ht_cyc_, 1, good_len_);
+        }
+
         if (wnd_curpos_ >= wnd_size_) 
             wnd_curpos_ = 0;
         i += cur_block_size;
     }
-    model_->EncodeMatch(64, 0);
+    if (lz_mode != 5) {
+        // for lz_mode == 5, Encode nothing, non terminator
+        model_->EncodeMatch(64, 0);
+    }
     return;
 }
 
-
-uint32_t LZ::CheckDuplicate(uint8_t *src,uint32_t size,uint32_t type)
+bool LZ::IsDuplicateBlock(uint8_t *src, uint32_t size)
 {
-    uint32_t lastWndPos = wnd_curpos_;
-
-    for(uint32_t i = 0; i < size; ) {
-        uint32_t cur_block_size = MIN(wnd_size_ - wnd_curpos_, size - i);
-        cur_block_size = MIN(cur_block_size, MinBlockSize);
-
-        memcpy(wnd_ + wnd_curpos_, src + i, cur_block_size);
-        //if (LZMinBlockSkip(cur_block_size,type)==DT_NORMAL)
-        if (0)
-        {
-            wnd_curpos_=lastWndPos;
-            return DT_NORMAL;
-        }
-
-        wnd_curpos_ += cur_block_size;
-        if (wnd_curpos_ >= wnd_size_) wnd_curpos_=0;
-        i += cur_block_size;
-    }
-    return DT_SKIP;
+    uint32_t mc = 0;
+    for(uint32_t i = 0; i < size; i += 13) 
+        if (mf_.TestFind(wnd_curpos_, src + i, size - i))
+            mc++;
+    if (mc * 13000 / size > 1)
+        return true;
+    else
+        return false;
 }
 
 void LZ::DuplicateInsert(uint8_t *src,uint32_t size)
@@ -118,121 +117,6 @@ void LZ::DuplicateInsert(uint8_t *src,uint32_t size)
     }
     return;
 }
-
-/*
-uint32_t LZ::LZMinBlockSkip(uint32_t size,uint32_t type)
-{
-
-    uint32_t curhash6,curhash3;
-    uint32_t i,j,cmpPos1,cmpPos2,cmpLen,remainLen,remainLen2;
-    //uint32_t matchDist;
-    uint32_t minMatchLen;
-    uint32_t *HT6;
-
-
-    const uint32_t curblock_endpos=wnd_curpos_+size;
-    const uint32_t currBlockStartPos=wnd_curpos_;
-
-    minMatchLen=70;
-    remainLen=size;
-
-    for(i=0;i<4;i++)
-    {
-        cmpPos1=wnd_curpos_>rep_dist_[i]?wnd_curpos_-rep_dist_[i]:wnd_curpos_+wnd_size_-rep_dist_[i];
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos) && (cmpPos1<wnd_size_) )
-        {
-            cmpPos2=wnd_curpos_;
-            remainLen2=MIN(remainLen,wnd_size_-cmpPos1);
-            remainLen2=MIN(remainLen2,72);
-
-            if (*(uint16_t*)&wnd_[cmpPos1]!=*(uint16_t*)&wnd_[cmpPos2]) continue;
-            if ((remainLen2<minMatchLen)||
-                (wnd_[cmpPos1+minMatchLen+1]!=wnd_[cmpPos2+minMatchLen+1])||
-                (wnd_[cmpPos1+(minMatchLen>>1)]!=wnd_[cmpPos2+(minMatchLen>>1)])
-                )
-                continue;
-
-            cmpPos1+=2;
-            cmpPos2+=2;
-            cmpLen=2;
-
-            if (remainLen2>3)
-                while ((cmpLen<remainLen2-3)&&(*(uint32_t*)(wnd_+cmpPos1)==*(uint32_t*)(wnd_+cmpPos2)))
-                {cmpPos1+=4;cmpPos2+=4;cmpLen+=4;}
-                while((cmpLen<remainLen2)&&(wnd_[cmpPos1++]==wnd_[cmpPos2++])) cmpLen++;
-                if (cmpLen>minMatchLen)
-                {
-                    return DT_NORMAL;
-                }
-        }
-    }
-
-    for(i=0;i<MIN(512,size);i++)
-    {
-        curhash6=HASH6(wnd_[wnd_curpos_+i]);
-        remainLen=size-i;
-
-
-        cmpPos1=mf_ht6_[curhash6*ht6_width_]&0x1FFFFFFF;
-
-        if ((cmpPos1<wnd_curpos_ || cmpPos1>curblock_endpos) 
-            && (cmpPos1<wnd_size_) 
-            && ((mf_ht6_[curhash6*ht6_width_]>>29)==((wnd_[wnd_curpos_+i]&0x0E)>>1)))
-        {
-            //matchDist=wnd_curpos_+i>cmpPos1?
-            //    wnd_curpos_+i-cmpPos1:wnd_curpos_+i+wnd_size_-cmpPos1;
-            cmpPos2=wnd_curpos_+i;
-            remainLen2=MIN(remainLen,wnd_size_-cmpPos1);
-            remainLen2=MIN(remainLen2,72);
-
-            if (*(uint32_t*)&wnd_[cmpPos1]==*(uint32_t*)&wnd_[cmpPos2])
-            {
-                if ((remainLen2<minMatchLen)||
-                    (wnd_[cmpPos1+minMatchLen+1]!=wnd_[cmpPos2+minMatchLen+1])||
-                    (wnd_[cmpPos1+(minMatchLen>>1)]!=wnd_[cmpPos2+(minMatchLen>>1)])
-                    )
-                    continue;
-                cmpPos1+=4;
-                cmpPos2+=4;
-                cmpLen=4;
-
-                if (remainLen2>3)
-                    while ((cmpLen<remainLen2-3)&&(*(uint32_t*)(wnd_+cmpPos1)==*(uint32_t*)(wnd_+cmpPos2)))
-                    {cmpPos1+=4;cmpPos2+=4;cmpLen+=4;}
-                    while((cmpLen<remainLen2)&&(wnd_[cmpPos1++]==wnd_[cmpPos2++])) cmpLen++;
-
-                    if (cmpLen>=minMatchLen)
-                    {
-                        return DT_NORMAL;
-                    }
-            }
-        }
-    }
-
-    if (type==DT_BAD)
-    {
-        for (j=0;j<size;j+=5)
-        {
-            curhash6=HASH6(wnd_[currBlockStartPos+j]);
-            HT6=&mf_ht6_[curhash6*ht6_width_];
-            for(i=ht6_width_-1;i>0;i--)
-                HT6[i]=HT6[i-1];
-            HT6[0]=(currBlockStartPos+j)|((wnd_[(currBlockStartPos+j)]&0x0E)<<28);
-        }
-    }
-    else
-    {
-        for (j=0;j<size;j+=2)
-        {
-            curhash6=HASH6(wnd_[currBlockStartPos+j]);
-            HT6=&mf_ht6_[curhash6*ht6_width_];
-            HT6[0]=(currBlockStartPos+j)|((wnd_[(currBlockStartPos+j)]&0x0E)<<28);
-        }
-    }
-
-    return DT_SKIP;
-}
-*/
 
 void LZ::encode_nonlit(MFUnit u)
 {
@@ -263,7 +147,7 @@ void LZ::encode_nonlit(MFUnit u)
     }
 }
 
-int LZ::compress_normal(uint32_t size, bool lazy)
+void LZ::compress_normal(uint32_t size, bool lazy)
 {
     MFUnit u1, u2;
     bool got_u1 = false;
@@ -300,16 +184,21 @@ int LZ::compress_normal(uint32_t size, bool lazy)
             got_u1 = false;
         }
     }
-    return 0;
+    return;
 }
 
+void LZ::compress_mf_skip(uint32_t size)
+{
+    mf_.SlidePosFast(wnd_curpos_, size);
+    wnd_curpos_ += size;
+}
 
 int LZ::compress_fast(uint32_t size)
 {
     return 0;
 }
 
-int LZ::compress_advanced(uint32_t size)
+void LZ::compress_advanced(uint32_t size)
 {
     uint32_t apend = 0, apcur = 0;
 
@@ -433,7 +322,6 @@ int LZ::compress_advanced(uint32_t size)
             }
         }
     }
-    return 0;
 }
 
 void LZ::ap_backward(int end)

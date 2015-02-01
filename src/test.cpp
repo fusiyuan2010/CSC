@@ -54,17 +54,24 @@ int main(int argc, char *argv[])
     prog.Progress = show_progress;
 
     if (argv[1][0] == 'c') {
-        CSCEncProps p;
-        CSCEncProps_Init(&p);
+        CSCProps p;
+        int level = 2;
+        if (argv[1][1])
+            level = argv[1][1] - '0';
+        CSCEncProps_Init(&p, 100000000, level);
+        p.DLTFilter = 0;
+        p.TXTFilter = 1;
+        p.EXEFilter = 1;
+        printf("Estimated memory usage: %llu MB\n", CSCEnc_EstMemUsage(&p) / 1048576);
         unsigned char buf[CSC_PROP_SIZE];
-        CSCEnc_WriteProperties(&p, buf);
+        CSCEnc_WriteProperties(&p, buf, 0);
         fwrite(buf, 1, CSC_PROP_SIZE, fout);
         CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&osss);
         CSCEnc_Encode(h, (ISeqInStream*)&isss, &prog);
         CSCEnc_Encode_Flush(h);
         CSCEnc_Destroy(h);
     } else {
-        CSCDecProps p;
+        CSCProps p;
         unsigned char buf[CSC_PROP_SIZE];
         (void)fread(buf, 1, CSC_PROP_SIZE, fin);
         CSCDec_ReadProperties(&p, buf);

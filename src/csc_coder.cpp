@@ -1,8 +1,9 @@
 #include <csc_coder.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 
-void Coder::Init(uint8_t *rc_buf, uint8_t *bc_buf, uint32_t size)
+int Coder::Init(MemIO *io)
 {
     rc_low_ = 0;
     rc_range_ = 0xFFFFFFFF;
@@ -15,11 +16,25 @@ void Coder::Init(uint8_t *rc_buf, uint8_t *bc_buf, uint32_t size)
 
     outsize_ = 0;
 
-    prc_ = rc_buf_ = rc_buf;
-    pbc_ = bc_buf_ = bc_buf;
-    rc_bufsize_ = bc_bufsize_ = size;
+    io_ = io;
+    rc_bufsize_ = bc_bufsize_ = io->GetBlockSize();
+    prc_ = rc_buf_ = (uint8_t *)malloc(rc_bufsize_);
+    pbc_ = bc_buf_ = (uint8_t *)malloc(bc_bufsize_);
+
+    if (rc_buf_ && bc_buf_) 
+        return 0;
+    else {
+        free(rc_buf_);
+        free(bc_buf_);
+        return -1;
+    }
 }
 
+void Coder::Destroy()
+{
+    free(rc_buf_);
+    free(bc_buf_);
+}
 
 void Coder::Flush()
 {
@@ -47,9 +62,6 @@ void Coder::Flush()
     io_->WriteBCData(bc_buf_,bc_size_);
 }
 
-
-
-
 void Coder::EncDirect16(uint32_t val,uint32_t len)
 {
     bc_curval_ = (bc_curval_ << len) | val;
@@ -62,7 +74,6 @@ void Coder::EncDirect16(uint32_t val,uint32_t len)
         bc_curbits_ -= 8;
     }
 }
-
 
 void Coder::RC_ShiftLow(void)
 {

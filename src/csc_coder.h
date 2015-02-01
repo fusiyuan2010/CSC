@@ -12,14 +12,15 @@
             pbc_ = bc_buf_;\
         }}while(0)
 
-
 class Coder
 {
-public:
     MemIO *io_;
 
-    //Initialize the coder, buffer1\2\size should not be NULL if x==ENCODE 
-    void Init(uint8_t* buffer1,uint8_t* buffer2,uint32_t size); 
+public:
+
+    int Init(MemIO *io);
+    void Destroy();
+
     //flush the coder
     void Flush();    
 
@@ -74,31 +75,6 @@ public:
         coder->rc_range_ <<= 8;\
         coder->RC_ShiftLow();\
     }}while(0)
-
-/*
-#define EncodeBit2(coder,v,p1,p2) do\
-{\
-    uint32_t newBound=(coder->rc_range_>>13)*(p1+p2);\
-    if (v)\
-{\
-    coder->rc_range_ = newBound;\
-    p1 += (0xFFF - p1) >> 5;\
-    p2 += (0xFFF - p2) >> 5;\
-}\
-    else\
-{\
-    coder->rc_low_+=newBound;\
-    coder->rc_range_-=newBound;\
-    p1 -= p1 >> 5;\
-    p2 -= p2 >> 5;\
-}\
-    if (coder->rc_range_ < (1<<24))\
-{\
-    coder->rc_range_ <<= 8;\
-    coder->RC_ShiftLow();\
-}\
-}while(0)
-*/
 
 #define EncodeDirect(x,v,l) do{if ((l) <= 16)\
         x->EncDirect16(v,l);\

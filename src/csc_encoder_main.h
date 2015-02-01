@@ -4,39 +4,16 @@
 #include "Common.h"
 #include <csc_model.h>
 #include <csc_filters.h>
-#include <csc_memio.h>
 #include <csc_analyzer.h>
 #include <csc_lz.h>
 #include <csc_coder.h>
 
-
-struct CSCSettings
-{
-    uint32_t hashBits;
-    uint32_t hashWidth;
-    uint32_t wndSize;
-    uint32_t maxSuccBlockSize;
-    uint32_t outStreamBlockSize;
-    uint32_t InBufferSize;
-
-
-    uint8_t lzMode;
-    MemIO *io;
-
-    uint8_t DLTFilter;
-    uint8_t TXTFilter;
-    uint8_t EXEFilter;
-    
-    void SetDefaultMethod(uint8_t method);
-    void Refresh();
-    CSCSettings();
-};
-
+class MemIO;
 
 class CSCEncoder
 {
 public:
-    int Init(CSCSettings setting);
+    int Init(const CSCProps *p, MemIO *io);
     
 
     void WriteEOF();
@@ -47,12 +24,12 @@ public:
 
     void Destroy();
 
-    void Compress(uint8_t *src,uint32_t size);
+    void Compress(uint8_t *src, uint32_t size);
 
-    int Decompress(uint8_t *src,uint32_t *size);
+    int Decompress(uint8_t *src, uint32_t *size);
     //*size==0 means meets the EOF in raw stream.
 
-    void CheckFileType(uint8_t *src,uint32_t size);
+    void CheckFileType(uint8_t *src, uint32_t size);
     //Should be called before compress a file.src points
     //to first several bytes of file.
     
@@ -61,26 +38,22 @@ public:
     
 
 private:
-    CSCSettings m_setting;
-
-    uint8_t *m_rcbuffer;
-    uint8_t *m_bcbuffer;
     uint32_t fixedDataType; //
     uint32_t typeArg1,typeArg2,typeArg3;
+    CSCProps p_;
 
-    Filters m_filters;
-    Coder m_coder;
-    Model m_model;
-    
-    LZ m_lz;
-    Analyzer m_analyzer;
+    Filters filters_;
+    Coder coder_;
+    Model model_;
+    LZ lz_;
+    Analyzer analyzer_;
 
-    uint32_t m_succBlockSize;
+    uint32_t rawblock_limit_;
     //This determines how much maximumly the CSCEncoder:Decompress can decompress
     // in one time. 
 
-    bool m_useFilters;
-    void InternalCompress(uint8_t *src,uint32_t size,uint32_t type);
+    bool use_filters_;
+    void compress_block(uint8_t *src,uint32_t size,uint32_t type);
     //compress the buffer and treat them in one type.It's called after analyze the data.
 
 };

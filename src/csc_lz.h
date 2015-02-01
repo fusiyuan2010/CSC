@@ -1,7 +1,6 @@
 #ifndef _CSC_LZ_H_
 #define _CSC_LZ_H_
 #include <Common.h>
-#include <csc_model.h>
 #include <csc_mf.h>
 
 class Model;
@@ -9,12 +8,9 @@ class Model;
 class LZ
 {
 public:
-    Model *model_;
-    int Init(uint32_t wnd_size, uint32_t hashBits,uint32_t hashWidth);
-    int Init(uint32_t WindowSize);
-
+    int Init(const CSCProps *p, Model *model);
     void EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode);
-    uint32_t CheckDuplicate(uint8_t *src,uint32_t size, uint32_t type);
+    bool IsDuplicateBlock(uint8_t *src,uint32_t size);
     void DuplicateInsert(uint8_t *src,uint32_t size);
 
     void Reset(void);
@@ -27,6 +23,9 @@ private:
     uint32_t wnd_size_;
     uint32_t curblock_endpos;
     uint32_t good_len_;
+    uint32_t bt_cyc_;
+    uint32_t ht_cyc_;
+    Model *model_;
 
     // New LZ77 Algorithm====================================
 // ============== OPTIMAL ====
@@ -43,11 +42,12 @@ private:
     static const int AP_LIMIT = 4096;
     APUnit apunits_[AP_LIMIT + 1];
 
-    int compress_normal(uint32_t size, bool lazy);
+    void compress_normal(uint32_t size, bool lazy);
+    void compress_mf_skip(uint32_t size);
     void encode_nonlit(MFUnit u);
 
     int compress_fast(uint32_t size);
-    int compress_advanced(uint32_t size);
+    void compress_advanced(uint32_t size);
     void ap_backward(int idx);
 
     MatchFinder mf_;

@@ -6,14 +6,15 @@
 
 #include <stdint.h>
 
-const uint32_t KB=1024;
-const uint32_t MB=1048576;
-const uint32_t MinBlockSize=8*KB;
+const uint32_t KB = 1024;
+const uint32_t MB = 1048576;
+const uint32_t MinBlockSize = 8 * KB;
 
 
-const uint32_t MaxChunkBits=21;
-const uint32_t MaxChunkSize=(1<<(MaxChunkBits-1));
-const uint32_t MaxDictSize=512*MB;//Don't change
+const uint32_t MaxChunkBits = 21;
+const uint32_t MaxChunkSize = (1<<(MaxChunkBits-1));
+const uint32_t MaxDictSize = 1024 * MB;//Don't change
+const uint32_t MinDictSize = 32 * KB;//Don't change
 
 #define DLT_CHANNEL_MAX 5
 const uint32_t DltIndex[DLT_CHANNEL_MAX]={1,2,3,4,8};
@@ -46,17 +47,23 @@ const uint32_t DltIndex[DLT_CHANNEL_MAX]={1,2,3,4,8};
 
 /******Block Type*************/
 #define DT_NONE 0
-#define DT_HARD 0x05
-#define DT_EXE 0x04
-#define DT_BAD 0x03
-#define DT_NORMAL 0x02
-#define DT_SKIP 0x01
+#define DT_NORMAL 0x01
+#define DT_ENGTXT 0x02
+#define DT_EXE 0x03
+#define DT_FAST 0x04
+
+///////////////////////////
+#define DT_NO_LZ 0x05
+
+//#define DT_HARD 0x05
 #define DT_AUDIO 0x06
 #define DT_RGB 0x07
-#define DT_FAST 0x08
+#define DT_BAD 0x08
 #define SIG_EOF 0x09
-#define DT_ENGTXT 0x0A
 #define DT_DLT 0x10
+
+// DT_SKIP means same with last one
+#define DT_SKIP 0x1E
 #define DT_MAXINDEX 0x1F
 /******Block Type*************/
 

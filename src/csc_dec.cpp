@@ -517,16 +517,14 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
 
 void CSCDecoder::lz_copy2dict(uint8_t *src, uint32_t size)
 {
-    uint32_t progress=0;
-    uint32_t cur_block;
-
-    while (progress < size) {
-        cur_block = MIN(wnd_size_ - wnd_curpos_, size - progress);
+    for(uint32_t i = 0; i < size; ) {
+        uint32_t cur_block;
+        cur_block = MIN(wnd_size_ - wnd_curpos_, size - i);
         cur_block = MIN(cur_block , MinBlockSize);
-        memcpy(wnd_ + wnd_curpos_, src + progress, cur_block);
+        memcpy(wnd_ + wnd_curpos_, src + i, cur_block);
         wnd_curpos_ += cur_block;
         wnd_curpos_ = wnd_curpos_ >= wnd_size_? 0 : wnd_curpos_;
-        progress += cur_block;
+        i += cur_block;
     }
 }
 
@@ -554,8 +552,8 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
             filters_->Inverse_Dict(dst, *size);
             break;
         case DT_BAD:
-            decode_bad(dst,size);
-            lz_copy2dict(dst,*size);
+            decode_bad(dst, size);
+            lz_copy2dict(dst, *size);
             break;
         //case DT_HARD:
         //    m_model.DecompressHard(dst,size);
@@ -577,13 +575,16 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
             *size=0;
             break;
         default:
-            if (type>=DT_DLT && type<DT_DLT+DLT_CHANNEL_MAX) {
-                uint32_t chnNum=DltIndex[type-DT_DLT];
+            if (type >= DT_DLT && type < DT_DLT + DLT_CHANNEL_MAX) {
+                uint32_t chnNum = DltIndex[type - DT_DLT];
                 decode_rle(dst,size);
-                filters_->Inverse_Delta(dst,*size,chnNum);
+                //decode_bad(dst, size);
+                //ret = lz_decode(dst, size, max_bsize);
+                filters_->Inverse_Delta(dst, *size, chnNum);
                 lz_copy2dict(dst, *size);
-            } else
+            } else {
                 return DECODE_ERROR;
+            }
             break;
     }
     return ret;
@@ -596,7 +597,7 @@ struct CSCInstance
     uint32_t raw_blocksize;
 };
 
-CSCDecHandle CSCDec_Create(const CSCDecProps *props, ISeqInStream *instream)
+CSCDecHandle CSCDec_Create(const CSCProps *props, ISeqInStream *instream)
 {
     CSCInstance *csc = new CSCInstance();
 
@@ -618,7 +619,7 @@ void CSCDec_Destroy(CSCDecHandle p)
     delete csc;
 }
 
-void CSCDec_ReadProperties(CSCDecProps *props, uint8_t *s)
+void CSCDec_ReadProperties(CSCProps *props, uint8_t *s)
 {
     props->dict_size = ((uint32_t)s[0] << 24) + (s[1] << 16) + (s[2] << 8) + s[3];
     props->csc_blocksize = ((uint32_t)s[4] << 16) + (s[5] << 8) + s[6];

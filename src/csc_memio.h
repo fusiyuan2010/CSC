@@ -31,6 +31,8 @@ class MemIO
 public:
     void Init(void *iostream, uint32_t bsize);
 
+    uint32_t GetBlockSize() { return bsize_; }
+
     int ReadRCData(uint8_t *buffer,uint32_t& size)
     {
         return ReadBlock(buffer, size, 1);

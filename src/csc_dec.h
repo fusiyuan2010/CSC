@@ -4,19 +4,12 @@
 
 EXTERN_C_BEGIN
 
-typedef struct _CSCDecProps {
-    size_t dict_size;
-    uint32_t csc_blocksize; // must be < 16M
-    uint32_t raw_blocksize; 
-} CSCDecProps;
-
-
 // DecProps usually needs to be read from existing data
-void CSCDec_ReadProperties(CSCDecProps *props, uint8_t *stream);
+void CSCDec_ReadProperties(CSCProps *props, uint8_t *stream);
 
 typedef void * CSCDecHandle;
 
-CSCDecHandle CSCDec_Create(const CSCDecProps *props, ISeqInStream *instream);
+CSCDecHandle CSCDec_Create(const CSCProps *props, ISeqInStream *instream);
 
 void CSCDec_Destroy(CSCDecHandle p);
 

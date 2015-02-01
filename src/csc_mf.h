@@ -28,6 +28,7 @@ class MatchFinder {
     uint32_t *ht6_;
     uint32_t ht_bits_;
     uint32_t ht_width_;
+    uint32_t ht_low_;
     static const uint32_t MF_CAND_LIMIT = 32;
     MFUnit mfcand_[MF_CAND_LIMIT];
 
@@ -35,7 +36,6 @@ class MatchFinder {
     uint32_t bt_bits_;
     uint32_t *bt_nodes_;
     uint32_t bt_size_;
-    uint32_t bt_smask_;
 
     uint32_t bt_pos_;
     uint32_t size_;
@@ -57,12 +57,14 @@ public:
             uint32_t ht_bits
             );
 
-    void SetArg(int bt_cyc, int ht_cyc, int good_len);
+    void SetArg(int bt_cyc, int ht_cyc, int ht_low, int good_len);
     void Destroy();
 
     // limit is useful only for binary tree mf
     void SlidePos(uint32_t wnd_pos, uint32_t len, uint32_t limit = 0xFFFFFFFF);
+    void SlidePosFast(uint32_t wnd_pos, uint32_t len);
     MFUnit FindMatch(uint32_t *rep_dist, uint32_t wnd_pos, uint32_t limit);
+    bool TestFind(uint32_t wnd_pos, uint8_t *src, uint32_t limit);
     bool SecondMatchBetter(MFUnit u1, MFUnit u2);
     void FindMatchWithPrice(Model *model, uint32_t state, MFUnit *ret, uint32_t *rep_dist, uint32_t wnd_pos, uint32_t limit);
     uint32_t pos_;

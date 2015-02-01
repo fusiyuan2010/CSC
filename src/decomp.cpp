@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     ICompressProgress prog;
     prog.Progress = show_progress;
 
-    CSCDecProps p;
+    CSCProps p;
     unsigned char buf[CSC_PROP_SIZE];
     (void)fread(buf, 1, CSC_PROP_SIZE, fin);
     CSCDec_ReadProperties(&p, buf);

@@ -4,25 +4,19 @@
 
 EXTERN_C_BEGIN
 
-typedef struct _CSCEncProps {
-    size_t dict_size;
-    uint8_t hash_bits;
-    uint8_t hash_width;
-    int lz_mode;
-    int DLTFilter;
-    int TXTFilter;
-    int EXEFilter;
-    uint32_t csc_blocksize; // must be < 16M
-    uint32_t raw_blocksize; // must be < 16M
-} CSCEncProps;
 
+// set default parameters with dict_size and level
+// further parameter changes must be after this call
+// level should be 1 to 4
+void CSCEncProps_Init(CSCProps *p, uint32_t dict_size = 64000000, int level = 2);
 
-void CSCEncProps_Init(CSCEncProps *p);
-void CSCEnc_WriteProperties(const CSCEncProps *props, uint8_t *stream);
+void CSCEnc_WriteProperties(const CSCProps *props, uint8_t *stream, int full);
+
+uint64_t CSCEnc_EstMemUsage(const CSCProps *props);
 
 typedef void * CSCEncHandle;
 
-CSCEncHandle CSCEnc_Create(const CSCEncProps *props, ISeqOutStream *outstream);
+CSCEncHandle CSCEnc_Create(const CSCProps *props, ISeqOutStream *outstream);
 
 void CSCEnc_Destroy(CSCEncHandle p);
 
