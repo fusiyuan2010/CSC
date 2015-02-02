@@ -1,6 +1,6 @@
 #ifndef _CSC_MF_H_
 #define _CSC_MF_H_
-#include <Common.h>
+#include <csc_typedef.h>
 
 
 class Model;

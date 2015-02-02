@@ -1,6 +1,6 @@
 #include <csc_enc.h>
 #include <csc_memio.h>
-#include <Common.h>
+#include <csc_typedef.h>
 #include <csc_encoder_main.h>
 #include <stdlib.h>
 
@@ -17,7 +17,7 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
     if (dict_size > 1024 * MB) dict_size = 1024 * MB;
     if (level < 1) level = 1;
     if (level > 5) level = 5;
-    p->dict_size = dict_size;
+    p->dict_size = dict_size + 10 * KB; // a little more, real size is 8KB smaller than set number
     p->DLTFilter = 1;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
@@ -57,9 +57,10 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
             p->hash_bits++;
             break;
         case 2:
-            p->hash_width = 8;
+            p->hash_width = 12;
             p->lz_mode = 2;
             p->bt_size = 0;
+            p->hash_bits--;
             break;
         case 3:
             p->hash_width = 2;

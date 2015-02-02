@@ -1,6 +1,6 @@
 #ifndef _CSC_MODEL_H_
 #define _CSC_MODEL_H_
-#include "Common.h"
+#include <csc_typedef.h>
 #include <csc_coder.h>
 
 
@@ -85,7 +85,7 @@ public:
 
     void CompressValue(uint8_t *src, uint32_t size,uint32_t width,uint32_t channelNum);
 
-    void EncodeInt(uint32_t num,uint32_t bits);
+    void EncodeInt(uint32_t num);
 
     uint32_t p_state_[4*4*4*3];//Original [64][3]
     // public for advanced parser 

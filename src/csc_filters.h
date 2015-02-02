@@ -1,7 +1,7 @@
 #ifndef _CSC_FILTERS_H_
 #define _CSC_FILTERS_H_
 
-#include "Common.h"
+#include <csc_typedef.h>
 #define MAX_WORDTREE_NODE_NUM 300 //Enough now!
 
 class Filters

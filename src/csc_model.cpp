@@ -385,9 +385,28 @@ uint32_t Model::GetMatchDistPrice(uint32_t fstate, uint32_t dist)
     return ret;
 }
 
-void Model::EncodeInt(uint32_t num,uint32_t bits)
+void Model::EncodeInt(uint32_t num)
 {
-    EncodeDirect(coder_,num,bits);
+    /* slot, extra_bits, range_end_close
+       0 - 1  1
+       1 - 1  3
+       2 - 2  7
+       3 - 3  15
+       ...
+       31 - 31 2^32 - 1
+    */
+
+    uint32_t tmp = num;
+    uint32_t slot = 0;
+    while(tmp) {
+        tmp >>= 1;
+        slot++;
+    }
+    if (slot) 
+        slot--;
+
+    EncodeDirect(coder_, slot, 5);
+    EncodeDirect(coder_, num - (1 << slot), slot == 0? 1 : slot);
 }
 
 void Model::CompressDelta(uint8_t *src,uint32_t size)
@@ -406,7 +425,7 @@ void Model::CompressDelta(uint8_t *src,uint32_t size)
     }
 
 
-    EncodeDirect(coder_,size,MaxChunkBits);
+    EncodeInt(size);
     for(i=0;i<size;i++)
     {
         p=&p_delta_[sCtx*256];
@@ -463,7 +482,7 @@ void Model::CompressHard(uint8_t *src,uint32_t size)
     uint32_t sCtx=16;
 
 
-    EncodeDirect(coder_,size,MaxChunkBits);
+    EncodeInt(size);
     for(i=0;i<size;i++)
     {
         p=&p_lit_[sCtx*256];
@@ -507,9 +526,8 @@ void Model::DecompressHard(uint8_t *dst,uint32_t *size)
 
 void Model::CompressBad(uint8_t *src,uint32_t size)
 {
-    uint32_t i;
-    EncodeDirect(coder_,size,MaxChunkBits);
-    for(i=0;i<size;i++)
+    EncodeInt(size);
+    for(uint32_t i = 0; i< size; i++)
         coder_->EncDirect16(src[i],8);
     return;
 }
@@ -520,8 +538,7 @@ void Model::CompressRLE(uint8_t *src, uint32_t size)
     uint32_t sCtx=0;
     uint32_t *p=NULL;
 
-    EncodeDirect(coder_,size,MaxChunkBits);
-
+    EncodeInt(size);
     if (p_delta_==NULL) {
         p_delta_=(uint32_t*)malloc(256*256*4);
         for (i=0;i<256*256;i++)

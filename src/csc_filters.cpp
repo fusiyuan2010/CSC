@@ -2,7 +2,6 @@
 #include <string.h>
 //#include <memory.h>
 #include <csc_filters.h>
-#include "Common.h"
 #include <stdio.h>
 
 const uint32_t wordNum=123;
@@ -131,47 +130,44 @@ void Filters::Init()
 void Filters::Destroy()
 {
 	if (m_fltSwapSize>0)
-	{
-		SAFEFREE(m_fltSwapBuf);
-	}
+		free(m_fltSwapBuf);
 	m_fltSwapBuf=0;
 }
 
 
 void Filters::Forward_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 {
-	uint32_t dstPos,i,j,prevByte;
+	uint32_t dstPos,i,j,prevByte = 0;
 	uint32_t lastDelta;
 
 	if (size<512)
 		return;
 
-	if (m_fltSwapSize<size)
-	{
+	if (m_fltSwapSize < size) {
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
-		m_fltSwapBuf=(uint8_t*)malloc(size);
-		m_fltSwapSize=size;
+			free(m_fltSwapBuf);
+		m_fltSwapBuf = (uint8_t*)malloc(size);
+		m_fltSwapSize = size;
 	}
 
-	memcpy(m_fltSwapBuf,src,size);
+	memcpy(m_fltSwapBuf, src, size);
 
-	dstPos=0;
-	prevByte=0;
-	lastDelta=0;
-	for (i=0;i<chnNum;i++)
+	dstPos = 0;
+	lastDelta = 0;
+
+	for (i=0;i<chnNum;i++) {
+        int32_t prev1 = 0, prev2 = 0;
 		for(j=i;j<size;j+=chnNum)
 		{
 			src[dstPos++]=m_fltSwapBuf[j]-prevByte;
 			prevByte=m_fltSwapBuf[j];
-			/*src[dstPos++]=m_fltSwapBuf[j]-(prevByte+lastDelta);
-			lastDelta=m_fltSwapBuf[j]-prevByte;
-			prevByte=m_fltSwapBuf[j];*/
-			//src[dstPos++]=m_fltSwapBuf[j];
+            /*
+			src[dstPos++] = m_fltSwapBuf[j] - (2 * prev1 - prev2 + prev1);
+            prev2 = prev1;
+            prev1 = m_fltSwapBuf[j];
+            */
 		}
-
+    }
 }
 
 
@@ -187,9 +183,8 @@ void Filters::Forward_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t col
 	if (m_fltSwapSize<size+(width+1)*channelNum) //no need boundry check
 	{
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
+			free(m_fltSwapBuf);
+
 		m_fltSwapBuf=(uint8_t*)malloc(size+(width+1)*channelNum);
 		m_fltSwapSize=size;
 	}
@@ -257,12 +252,10 @@ void Filters::Inverse_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t col
 	if (size<512)
 		return;
 
-	if (m_fltSwapSize<size)
-	{
+	if (m_fltSwapSize<size) {
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
+			free(m_fltSwapBuf);
+        
 		m_fltSwapBuf=(uint8_t*)malloc(size);
 		m_fltSwapSize=size;
 	}
@@ -289,12 +282,10 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 	if (size<16384) 
 		return 0;
 
-	if (m_fltSwapSize<size)
-	{
+	if (m_fltSwapSize<size) {
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
+			free(m_fltSwapBuf);
+
 		m_fltSwapBuf=(uint8_t*)malloc(size);
 		m_fltSwapSize=size;
 	}
@@ -387,12 +378,10 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 void Filters::Inverse_Dict(uint8_t *src,uint32_t size)
 {
 
-	if (m_fltSwapSize<size)
-	{
+	if (m_fltSwapSize<size) {
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
+			free(m_fltSwapBuf);
+
 		m_fltSwapBuf=(uint8_t*)malloc(size);
 		m_fltSwapSize=size;
 	}
@@ -432,12 +421,10 @@ void Filters::Inverse_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 	if (size<512) 
 		return;
 
-	if (m_fltSwapSize<size)
-	{
+	if (m_fltSwapSize<size) {
 		if (m_fltSwapSize>0)
-		{
-			SAFEFREE(m_fltSwapBuf);
-		}
+			free(m_fltSwapBuf);
+
 		m_fltSwapBuf=(uint8_t*)malloc(size);
 		m_fltSwapSize=size;
 	}

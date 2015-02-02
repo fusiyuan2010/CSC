@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <Common.h>
 #include <csc_encoder_main.h>
 #include <csc_common.h>
 
@@ -43,31 +42,36 @@ void CSCEncoder::compress_block(uint8_t *src,uint32_t size, uint32_t type)
     */
 
     if (type == DT_NORMAL) {
-        model_.EncodeInt(type, 5);
+        model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, cur_lz_mode);
     } else if (type == DT_EXE) {
-        model_.EncodeInt(type, 5);
+        model_.EncodeInt(type);
         filters_.Forward_E89(src, size);
         lz_.EncodeNormal(src, size, cur_lz_mode);
     } else if (type == DT_ENGTXT) {
         if (filters_.Foward_Dict(src, size)) {
-            model_.EncodeInt(type, 5);
-            model_.EncodeInt(size, MaxChunkBits);
+            model_.EncodeInt(type);
+            model_.EncodeInt(size);
         } else
-            model_.EncodeInt(DT_NORMAL, 5);
+            model_.EncodeInt(DT_NORMAL);
         lz_.EncodeNormal(src, size, cur_lz_mode);
     } else if (type == DT_FAST) {
         // DT_FAST is the same output stream with NORMAL
-        model_.EncodeInt(DT_NORMAL, 5);
+        model_.EncodeInt(DT_NORMAL);
         lz_.EncodeNormal(src, size, 4);
     } else if (type == DT_BAD) {
-        model_.EncodeInt(type, 5);
+        model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, 5);
         model_.CompressBad(src, size);
     } else if (type >= DT_DLT && type < DT_DLT + DLT_CHANNEL_MAX) {
         uint32_t chnNum = DltIndex[type - DT_DLT];
-        model_.EncodeInt(type, 5);
+        model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, 5);
+        {
+            FILE *f = fopen("dlt.dat", "ab");
+            fwrite(src, 1, size, f);
+            fclose(f);
+        }
         filters_.Forward_Delta(src, size, chnNum);
         model_.CompressRLE(src,size);
         //model_.CompressBad(src, size);
@@ -90,7 +94,7 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
 
         if (use_filters_) {
             if (fixedDataType == DT_NONE)
-                this_type = analyzer_.analyze(src + i, cur_block_size);
+                this_type = analyzer_.Analyze(src + i, cur_block_size);
             else 
                 this_type=fixedDataType;
         } else
@@ -135,7 +139,7 @@ void CSCEncoder::Flush()
 
 void CSCEncoder::WriteEOF()
 {
-    model_.EncodeInt(SIG_EOF,5);
+    model_.EncodeInt(SIG_EOF);
 }
 
 

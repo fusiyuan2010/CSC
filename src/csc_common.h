@@ -10,7 +10,7 @@
 
 #define CSC_PROP_SIZE (4 + 3 + 3)
 
-typedef struct _CSCEncProps {
+typedef struct _CSCProps {
     // LZ77 dictionary size, 32 KB to 1GB, real size is 8KB less
     size_t dict_size;
 

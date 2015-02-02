@@ -1,7 +1,6 @@
 #ifndef _CCSC_H
 #define _CCSC_H
 
-#include "Common.h"
 #include <csc_model.h>
 #include <csc_filters.h>
 #include <csc_analyzer.h>

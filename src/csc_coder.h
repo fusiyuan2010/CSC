@@ -1,7 +1,7 @@
 #ifndef _CSC_CODER_H_
 #define _CSC_CODER_H_
 #include <csc_memio.h>
-#include <Common.h>
+#include <csc_typedef.h>
 #include <stdio.h>
 
 #define BCWCheckBound() do{if (bc_size_ == bc_bufsize_) \

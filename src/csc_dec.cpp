@@ -1,7 +1,7 @@
 #include <csc_dec.h>
 #include <csc_memio.h>
 #include <csc_filters.h>
-#include <Common.h>
+#include <csc_typedef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -83,14 +83,16 @@ class CSCDecoder
         return result;
     }
 
-    uint32_t decode_int(uint32_t bits) {
-        uint32_t num;
-        DecodeDirect(this, num, bits);
+    uint32_t decode_int() {
+        uint32_t slot, num;
+        DecodeDirect(this, slot, 5);
+        DecodeDirect(this, num, slot == 0? 1 : slot);
+        num += (1 << slot);
         return num;
     }
 
     void decode_bad(uint8_t *dst, uint32_t *size) {
-        DecodeDirect(this, *size, MaxChunkBits);
+        *size = decode_int();
         for(uint32_t i = 0; i < *size; i++)
             dst[i] = coder_decode_direct(8);
     }
@@ -106,7 +108,7 @@ class CSCDecoder
                 p_delta_[i]=2048;
         }
 
-        DecodeDirect(this, *size, MaxChunkBits);
+        *size = decode_int();
         for (i = 0; i < *size; ) {
             flag=0;
             DecodeBit(this, flag, p_rle_flag_);
@@ -531,7 +533,7 @@ void CSCDecoder::lz_copy2dict(uint8_t *src, uint32_t size)
 int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
 {
     int ret = 0;
-    uint32_t type = decode_int(5);
+    uint32_t type = decode_int();
     switch (type) {
         case DT_NORMAL:
             ret = lz_decode(dst, size, max_bsize);
@@ -545,7 +547,7 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
             filters_->Inverse_E89(dst, *size);
             break;
         case DT_ENGTXT:
-            *size = decode_int(MaxChunkBits);
+            *size = decode_int();
             ret = lz_decode(dst, size, max_bsize);
             if (ret<0)
                 return ret;

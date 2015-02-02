@@ -99,7 +99,7 @@ bool LZ::IsDuplicateBlock(uint8_t *src, uint32_t size)
     for(uint32_t i = 0; i < size; i += 13) 
         if (mf_.TestFind(wnd_curpos_, src + i, size - i))
             mc++;
-    if (mc * 13000 / size > 1)
+    if (mc * 13000 / size > 3) // 3/1000
         return true;
     else
         return false;

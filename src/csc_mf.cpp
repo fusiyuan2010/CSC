@@ -61,10 +61,11 @@ int MatchFinder::Init(uint8_t *wnd,
     ht3_ = mfbuf_ + cpos;
     cpos += HT3_SIZE_;
 
-    if (ht_bits_) {
+    if (ht_bits_ && ht_width_) {
         ht6_ = mfbuf_ + cpos;
         cpos += ht_width_ * (1 << ht_bits_);
-    }
+    } else 
+        ht6_ = NULL;
 
     if (bt_bits_) {
         bt_head_ = mfbuf_ + cpos;
@@ -207,10 +208,11 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
     uint32_t h6 = HASH6(wnd_ + wpos, ht_bits_);
     uint32_t hbt = HASH6(wnd_ + wpos, bt_bits_);
     uint32_t minlen = 1, cnt = 0, dist = 0;
-    PREFETCH_T0(ht6_ + h6 * ht_width_);
-    if (bt_head_) {
+    if (ht_width_) 
+        PREFETCH_T0(ht6_ + h6 * ht_width_);
+
+    if (bt_head_)
         PREFETCH_T0(bt_head_ + hbt);
-    }
 
     if (!ht_low_) goto MAIN_MF;
     PREFETCH_T0(ht2_ + h2);
@@ -304,6 +306,8 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
         }
         break;
     }
+    ht2_[h2] = pos_;
+    ht3_[h3] = pos_;
 
 MAIN_MF:
     if (bt_head_) {
@@ -389,8 +393,6 @@ MAIN_MF:
     }
 
     if (ht_width_) {
-        ht2_[h2] = pos_;
-        ht3_[h3] = pos_;
         for(uint32_t i = cands - 1; i > 0; i--)
             ht6[i] = ht6[i-1];
         ht6[0] = pos_;
