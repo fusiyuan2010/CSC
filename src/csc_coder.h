@@ -57,6 +57,7 @@ public:
     uint32_t bc_size_;
     uint32_t rc_size_;
     int64_t outsize_;
+    uint32_t bnum_;
 };
 
 

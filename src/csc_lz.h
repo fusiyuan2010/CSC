@@ -46,7 +46,6 @@ private:
     void compress_mf_skip(uint32_t size);
     void encode_nonlit(MFUnit u);
 
-    int compress_fast(uint32_t size);
     void compress_advanced(uint32_t size);
     void ap_backward(int idx);
 

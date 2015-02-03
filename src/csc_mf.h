@@ -14,7 +14,7 @@ struct MFUnit {
 };
 
 class MatchFinder {
-    static const uint32_t HT3_SIZE_ = 64 * KB;
+    static const uint32_t HT3_SIZE_ = 16 * KB;
     static const uint32_t HT2_SIZE_ = 64 * KB;
 
     uint8_t *wnd_;

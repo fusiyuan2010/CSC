@@ -6,7 +6,6 @@
 #include <csc_coder.h>
 #include <csc_model.h>
 #include <csc_lz.h>
-#include <stdio.h>
 
 int LZ::Init(const CSCProps *p, Model *model)
 {
@@ -70,16 +69,21 @@ void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
             compress_normal(cur_block_size, true);
         else if (lz_mode == 3)
             compress_advanced(cur_block_size);
+        /*
         else if (lz_mode == 4) {
-            mf_.SetArg(1, 1, 0, good_len_);
+            mf_.SetArg(1, 2, 0, good_len_);
             compress_normal(cur_block_size, false);
             mf_.SetArg(bt_cyc_, ht_cyc_, 1, good_len_);
-        } else if (lz_mode == 5) {
+            
+        }*/ else if (lz_mode == 5) {
             // only copy the block data to window and put it into MF
             // No encoded output 
             mf_.SetArg(1, 1, 0, good_len_);
             compress_mf_skip(cur_block_size);
             mf_.SetArg(bt_cyc_, ht_cyc_, 1, good_len_);
+        } else {
+            printf("Error!");
+            exit(0);
         }
 
         if (wnd_curpos_ >= wnd_size_) 
@@ -96,13 +100,13 @@ void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
 bool LZ::IsDuplicateBlock(uint8_t *src, uint32_t size)
 {
     uint32_t mc = 0;
-    for(uint32_t i = 0; i < size; i += 13) 
-        if (mf_.TestFind(wnd_curpos_, src + i, size - i))
+    for(uint32_t i = 0; i < size; i += 7) 
+        if (mf_.TestFind(wnd_curpos_, src + i, size - i)) {
             mc++;
-    if (mc * 13000 / size > 3) // 3/1000
-        return true;
-    else
-        return false;
+            if (mc)
+                return true;
+        }
+    return false;
 }
 
 void LZ::DuplicateInsert(uint8_t *src,uint32_t size)
@@ -162,8 +166,11 @@ void LZ::compress_normal(uint32_t size, bool lazy)
                 encode_nonlit(u1);
             mf_.SlidePos(wnd_curpos_, u1.len, size - i);
             i += u1.len; wnd_curpos_ += u1.len;
-            if (u1.dist)
+            if (u1.dist) {
                 model_->SetLiteralCtx(wnd_[wnd_curpos_ - 1]);
+                //if (u1.dist <= 4 && rep_dist_[u1.dist - 1] < 20)
+                //    model_->SetLiteralCtx(wnd_[wnd_curpos_ - rep_dist_[u1.dist - 1]]);
+            }
             got_u1 = false;
             continue;
         }
@@ -181,6 +188,8 @@ void LZ::compress_normal(uint32_t size, bool lazy)
             mf_.SlidePos(wnd_curpos_ + 1, u1.len - 1, size - i - 1);
             i += u1.len; wnd_curpos_ += u1.len;
             model_->SetLiteralCtx(wnd_[wnd_curpos_ - 1]);
+                //if (u1.dist <= 4 && rep_dist_[u1.dist - 1] < 20)
+                //    model_->SetLiteralCtx(wnd_[wnd_curpos_ - rep_dist_[u1.dist - 1]]);
             got_u1 = false;
         }
     }
@@ -191,11 +200,6 @@ void LZ::compress_mf_skip(uint32_t size)
 {
     mf_.SlidePosFast(wnd_curpos_, size);
     wnd_curpos_ += size;
-}
-
-int LZ::compress_fast(uint32_t size)
-{
-    return 0;
 }
 
 void LZ::compress_advanced(uint32_t size)

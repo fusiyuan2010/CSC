@@ -9,8 +9,9 @@ class Analyzer
 public:
 	void Init();
 	//~Analyzer();
-	uint32_t Analyze(uint8_t* src, uint32_t size);
-	uint32_t AnalyzeHeader(uint8_t *src, uint32_t size,uint32_t *typeArg1,uint32_t *typeArg2,uint32_t *typeArg3);
+	uint32_t Analyze(uint8_t* src, uint32_t size, uint32_t *bpb);
+	uint32_t AnalyzeHeader(uint8_t *src, uint32_t size);//,uint32_t *typeArg1,uint32_t *typeArg2,uint32_t *typeArg3);
+    uint32_t GetDltBpb(uint8_t *src, uint32_t size, uint32_t chn);
 
 private:
 	uint32_t logTable[(MinBlockSize >> 4) + 1];

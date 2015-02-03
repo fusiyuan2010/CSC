@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
         printf("Estimated memory usage: %llu MB\n", CSCEnc_EstMemUsage(&p) / 1048576ull);
         unsigned char buf[CSC_PROP_SIZE];
         CSCEnc_WriteProperties(&p, buf, 0);
-        fwrite(buf, 1, CSC_PROP_SIZE, fout);
+        (void)(fwrite(buf, 1, CSC_PROP_SIZE, fout) + 1);
         CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&osss);
         CSCEnc_Encode(h, (ISeqInStream*)&isss, &prog);
         CSCEnc_Encode_Flush(h);
@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
     } else {
         CSCProps p;
         unsigned char buf[CSC_PROP_SIZE];
-        (void)fread(buf, 1, CSC_PROP_SIZE, fin);
+        (void)(fread(buf, 1, CSC_PROP_SIZE, fin) + 1);
         CSCDec_ReadProperties(&p, buf);
         CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&isss);
         CSCDec_Decode(h, (ISeqOutStream*)&osss, &prog);

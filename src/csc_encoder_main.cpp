@@ -34,12 +34,6 @@ void CSCEncoder::compress_block(uint8_t *src,uint32_t size, uint32_t type)
         return;
 
     uint8_t cur_lz_mode = p_.lz_mode;
-    /*
-    if (type == DT_FAST)  {
-        type = DT_NORMAL;
-        cur_lz_mode = 0;
-    }
-    */
 
     if (type == DT_NORMAL) {
         model_.EncodeInt(type);
@@ -56,9 +50,9 @@ void CSCEncoder::compress_block(uint8_t *src,uint32_t size, uint32_t type)
             model_.EncodeInt(DT_NORMAL);
         lz_.EncodeNormal(src, size, cur_lz_mode);
     } else if (type == DT_FAST) {
-        // DT_FAST is the same output stream with NORMAL
+        // Now actually disabled fast mode
         model_.EncodeInt(DT_NORMAL);
-        lz_.EncodeNormal(src, size, 4);
+        lz_.EncodeNormal(src, size, cur_lz_mode);
     } else if (type == DT_BAD) {
         model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, 5);
@@ -67,7 +61,7 @@ void CSCEncoder::compress_block(uint8_t *src,uint32_t size, uint32_t type)
         uint32_t chnNum = DltIndex[type - DT_DLT];
         model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, 5);
-        {
+        if (0) {
             FILE *f = fopen("dlt.dat", "ab");
             fwrite(src, 1, size, f);
             fclose(f);
@@ -85,6 +79,7 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
     uint32_t last_type, this_type;
     uint32_t last_begin, last_size;
     uint32_t cur_block_size;
+    uint32_t bpb;
 
     last_begin = last_size=0;
     last_type = DT_NORMAL;
@@ -94,7 +89,7 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
 
         if (use_filters_) {
             if (fixedDataType == DT_NONE)
-                this_type = analyzer_.Analyze(src + i, cur_block_size);
+                this_type = analyzer_.Analyze(src + i, cur_block_size, &bpb);
             else 
                 this_type=fixedDataType;
         } else
@@ -112,14 +107,21 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
                 this_type = DT_NORMAL;
         }
 
+        if (this_type >= DT_DLT
+                && analyzer_.GetDltBpb(src + i, cur_block_size, DltIndex[this_type - DT_DLT]) >= bpb * 0.95) {
+            this_type = DT_NORMAL;
+        }
+
         if (this_type >= DT_NO_LZ) {
-            if (lz_.IsDuplicateBlock(src + i, cur_block_size)) {
-                this_type = DT_FAST;
-            }
+            if (lz_.IsDuplicateBlock(src + i, cur_block_size))
+                this_type = DT_NORMAL;
         }
         
         if (last_type != this_type || last_size + cur_block_size > rawblock_limit_) {
-            compress_block(src + last_begin, last_size, last_type);
+            if (last_size) {
+                compress_block(src + last_begin, last_size, last_type);
+                model_.EncodeInt(0);
+            }
             last_begin = i;
             last_size = 0;
         }
@@ -128,7 +130,11 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
         last_size += cur_block_size;
         i += cur_block_size;
     }
-    compress_block(src + last_begin, last_size, last_type);
+    if (last_size) {
+        compress_block(src + last_begin, last_size, last_type);
+        model_.EncodeInt(1);
+        coder_.Flush();
+    }
 }
 
 

@@ -406,7 +406,10 @@ void Model::EncodeInt(uint32_t num)
         slot--;
 
     EncodeDirect(coder_, slot, 5);
-    EncodeDirect(coder_, num - (1 << slot), slot == 0? 1 : slot);
+    if (slot == 0)
+        EncodeDirect(coder_, num, 1);
+    else
+        EncodeDirect(coder_, num - (1 << slot), slot);
 }
 
 void Model::CompressDelta(uint8_t *src,uint32_t size)

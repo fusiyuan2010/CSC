@@ -17,10 +17,10 @@ public:
 
 	void Forward_Delta(uint8_t *src,uint32_t size,uint32_t chnNum);
 	void Inverse_Delta(uint8_t *src,uint32_t size,uint32_t chnNum);
-	void Forward_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t colorBits);
-	void Inverse_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t colorBits);
-	void Forward_Audio(uint8_t *src,uint32_t size,uint32_t wavChannels,uint32_t sampleBits);
-	void Inverse_Audio(uint8_t *src,uint32_t size,uint32_t wavChannels,uint32_t sampleBits);
+	//void Forward_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t colorBits);
+	//void Inverse_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t colorBits);
+	//void Forward_Audio(uint8_t *src,uint32_t size,uint32_t wavChannels,uint32_t sampleBits);
+	//void Inverse_Audio(uint8_t *src,uint32_t size,uint32_t wavChannels,uint32_t sampleBits);
 	//void Forward_Audio4(uint8_t *src,uint32_t size);
 	//void Inverse_Audio4(uint8_t *src,uint32_t size);
 

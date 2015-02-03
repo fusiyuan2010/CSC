@@ -21,8 +21,8 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
     p->DLTFilter = 1;
     p->TXTFilter = 1;
     p->EXEFilter = 1;
-    p->csc_blocksize = 32 * KB;
-    p->raw_blocksize = 1 * MB;
+    p->csc_blocksize = 64 * KB;
+    p->raw_blocksize = 2 * MB;
 
     uint32_t hbits = 20;
     if (dict_size < MB)
@@ -48,32 +48,33 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
         p->bt_size = (dict_size - 256 * MB) / 8 + 88 * MB;
 
     p->good_len = 32;
-    p->hash_bits = p->bt_hash_bits = hbits;
+    p->hash_bits = hbits;
+    p->bt_hash_bits = hbits + 1;
     switch (level) {
         case 1:
-            p->hash_width = 2;
-            p->lz_mode = 1;
+            p->hash_width = 1;
+            p->lz_mode = 2;
             p->bt_size = 0;
             p->hash_bits++;
             break;
         case 2:
-            p->hash_width = 12;
+            p->hash_width = 8;
             p->lz_mode = 2;
             p->bt_size = 0;
-            p->hash_bits--;
+            p->good_len = 24;
             break;
         case 3:
             p->hash_width = 2;
             p->lz_mode = 3;
             p->bt_size = 0;
-            p->good_len = 18;
+            p->good_len = 24;
             p->hash_bits++;
             break;
         case 4:
             p->hash_width = 2;
             p->lz_mode = 3;
             p->bt_cyc = 16;
-            p->good_len = 24;
+            p->good_len = 36;
             break;
         case 5:
             p->hash_width = 4;
@@ -97,7 +98,7 @@ uint64_t CSCEnc_EstMemUsage(const CSCProps *p)
         ret += ((1 << p->bt_hash_bits) + 2 * p->bt_size) * sizeof(uint32_t);
     if (p->hash_width)
         ret += (p->hash_width * (1 << p->hash_bits)) * sizeof(uint32_t);
-    ret += 128 * KB *sizeof(uint32_t);
+    ret += 80 * KB *sizeof(uint32_t);
     ret += 256 * 256 * sizeof(uint32_t);
     ret += 2 * MB;
     return ret;

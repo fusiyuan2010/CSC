@@ -26,8 +26,9 @@ Analyzer::~Analyzer()
 */
 
 
-uint32_t Analyzer::AnalyzeHeader(uint8_t *src,uint32_t size,uint32_t *typeArg1,uint32_t *typeArg2,uint32_t *typeArg3)
+uint32_t Analyzer::AnalyzeHeader(uint8_t *src, uint32_t size) //,uint32_t *typeArg1,uint32_t *typeArg2,uint32_t *typeArg3)
 {
+    
     /*
 	if (size<128)
 		return DT_NONE;
@@ -115,7 +116,7 @@ uint32_t Analyzer::AnalyzeHeader(uint8_t *src,uint32_t size,uint32_t *typeArg1,u
 	//if (Peekl(tufx+8)==1163280727)  {Decont=1;processed=1;chn=Peekw(tufx+22);deltarange=(Peekw(tufx+34)>>3);}//
 	//if (Peekl(tufx)==1297239878 && Peekl(tufx+8)==1179011393 )  {Decont=1;chn=Peekb(tufx+21);deltarange=Peekb(tufx+27)>>3;} //AIFF AUDIO
 
-	//if (*(tufx)==80  && *(tufx+1)==54  && *(tufx+2)==10 ){ CTX1=3;CTX2=6;processed=0;chn=1;deltarange=Deltac;ROLZ=0;RZCLEVEL=2;PPMread();} //*PPM
+	//if (*(tufx)==80  && *(tufx+1)==54  && *(tufx+2)==10 ){ CTX1=3;CTX2=6;processed=0;chn=1;deltarange=Deltac;ROLZ=0;RZCLEVEL=2;PPMread();} //PPM
 
 	*.wav -----   if (Peekl(tufx)==1179011410)       { processed=1;ROLZ=0;RZCLEVEL=2;chn=1;deltarange=1;} //RIFF WAVE
 	if (Peekl(tufx)==1297239878        && Peekl(tufx+8)==1179011393 )            {processed=Deltac;ROLZ=0;RZCLEVEL=2;chn=Peekb(tufx+21);CTX1=chn*(Peekb(tufx+27)>>3);CTX2=CTX1*2;deltarange=Peekb(tufx+27)>>3;} //AIFF AUDIO
@@ -173,7 +174,25 @@ int32_t Analyzer::get_channel_idx(uint8_t *src,uint32_t size)
 	return -1;
 }
 
-uint32_t Analyzer::Analyze(uint8_t *src,uint32_t size)
+uint32_t Analyzer::GetDltBpb(uint8_t *src, uint32_t size, uint32_t chn)
+{
+    uint32_t freq[256] = {0};
+    uint8_t prev = 0;
+    uint32_t bpb = 0;
+    for(uint32_t i = 0; i < chn; i++)
+        for(uint32_t j = i; j < size; j += chn) {
+            freq[uint8_t(src[j] - prev)]++;
+            prev = src[j];
+        }
+
+	bpb = size * logTable[size>>4];
+	for(uint32_t i = 0; i < 256; i++) 
+		bpb -= freq[i] * logTable[freq[i] >> 4];
+    bpb /= size;
+    return bpb;
+}
+
+uint32_t Analyzer::Analyze(uint8_t *src, uint32_t size, uint32_t *bpb)
 {
 	uint32_t avgFreq,freq[256]={0};
 	uint32_t freq0x80[2]={0};
@@ -191,11 +210,12 @@ uint32_t Analyzer::Analyze(uint8_t *src,uint32_t size)
 	diffNum = 0;
 	entropy = size * logTable[size>>4];
 
-	for(uint32_t i=0;i<256;i++) {
+	for(uint32_t i = 0; i < 256; i++) {
 		entropy -= freq[i] * logTable[freq[i] >> 4];
 		diffNum += (freq[i] > 0);
 		freq0x80[i >> 7] += freq[i];
 	}
+    *bpb = entropy / size;
 
 	avgFreq = size >> 8;
 

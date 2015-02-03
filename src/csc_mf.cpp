@@ -15,7 +15,7 @@
 #define HASH4(a, bits) (((*(uint32_t*)(a))*2654435761u)>>(32-bits))
 
 #define HASH3(a) ((*(a)<<8)^(*((a)+1)<<5)^(*((a)+2)))
-#define HASH2(a) (*(uint16_t*)(a))
+#define HASH2(a) ((*(uint16_t*)(a) * 2654435761u) & 0x3FFF)
 
 
 
@@ -129,7 +129,7 @@ void MatchFinder::SlidePos(uint32_t wnd_pos, uint32_t len, uint32_t limit)
             lasth6 = h6;
         }
 
-        if (!bt_head_) { pos_++; i++; bt_pos_ ++; continue; }
+        if (!bt_head_) { pos_++; i++; continue; }
         if (bt_pos_ >= bt_size_) bt_pos_ -= bt_size_;
         uint32_t dist = pos_ - bt_head_[hbt];
         uint32_t *l = &bt_nodes_[bt_pos_ * 2], *r = &bt_nodes_[bt_pos_ * 2 + 1];
@@ -186,7 +186,10 @@ void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
 
         if (ht_width_) {
             h = HASH6(wnd_ + wpos, ht_bits_);
-            ht6_[h * ht_width_] = pos_;
+            uint32_t *ht6 = ht6_ + h * ht_width_;
+            //for(uint32_t i = ht_width_ - 1; i > 0; i--)
+            //    ht6[i] = ht6[i-1];
+            ht6[0] = pos_;
         }
 
         if (bt_head_) { 
@@ -214,10 +217,10 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
     if (bt_head_)
         PREFETCH_T0(bt_head_ + hbt);
 
-    if (!ht_low_) goto MAIN_MF;
-    PREFETCH_T0(ht2_ + h2);
-    PREFETCH_T0(ht3_ + h3);
-
+    if (ht_low_) {
+        PREFETCH_T0(ht2_ + h2);
+        PREFETCH_T0(ht3_ + h3);
+    }
 
     for(uint32_t i = 0; i < 4; i++) {
         if (rep_dist[i] >= vld_rge_) continue;
@@ -250,6 +253,8 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
             }
         }
     }
+
+    if (!ht_low_) goto MAIN_MF;
 
     if (pos_ - ht2_[h2] > dist) for(;;) {
         dist = pos_ - ht2_[h2];
@@ -403,59 +408,75 @@ MAIN_MF:
 
 MFUnit MatchFinder::FindMatch(uint32_t *rep_dist, uint32_t wnd_pos, uint32_t limit)
 {
-    static const uint32_t cof[] = {0, 5, 9, 13};
+    static const uint32_t cof[] = {0, 4, 8, 12};
     mfcand_[0].len = 1;
     mfcand_[0].dist = 0;
     uint32_t n = find_match(mfcand_ + 1, rep_dist, wnd_pos, limit);
     int bestidx = 0;
     for(uint32_t i = 1; i <= n; i++) {
-        if (!bestidx || mfcand_[i].len > mfcand_[bestidx].len + 3
-            || (mfcand_[i].dist <= 4)
-            || (mfcand_[bestidx].dist > 4
-                && (mfcand_[i].dist >> cof[mfcand_[i].len - mfcand_[bestidx].len]) < mfcand_[bestidx].dist)) 
+        if (!bestidx) {
             bestidx = i;
+            continue;
+        }
+        MFUnit &u1 = mfcand_[bestidx];
+        MFUnit &u2 = mfcand_[i];
+        if (u2.len > 1 && (
+                (u2.len > u1.len + 3)
+                || (u2.len > u1.len && u2.dist <= 4)
+                || (u2.len + 2 > u1.len && u2.dist <= 4 && u1.dist > 4)
+                || (u2.len >= u1.len //&& u1.dist > 4 
+                    && (u2.dist >> cof[u2.len - u1.len]) <= u1.dist)
+                || (u2.len < u1.len && u2.len + 2 >= u1.len && u1.dist > 4 
+                    && (u1.dist >> cof[u1.len - u2.len]) > u2.dist)
+                ))
+            bestidx = i;
+
     }
     return mfcand_[bestidx];
 }
 
 bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
 {
-    uint32_t dist = wnd_size_;
+    uint32_t dists[2] = {wnd_size_, wnd_size_};
+
     if (ht_width_) {
         uint32_t h = HASH6(src, ht_bits_);
-        dist = pos_ - ht6_[h * ht_width_];
-    } else {
+        dists[0] = pos_ - ht6_[h * ht_width_];
+    } 
+
+    if (bt_head_) {
         uint32_t h = HASH6(src, bt_bits_);
-        dist = pos_ - bt_head_[h];
+        dists[1] = pos_ - bt_head_[h];
     }
 
-    if (dist >= vld_rge_) 
-        return false;
-    uint32_t cmp_pos = wpos >= dist ? wpos - dist : wpos + wnd_size_ - dist;
-    uint32_t climit = MIN(limit, 24);
-    climit = MIN(limit, wnd_size_ - cmp_pos);
-    uint8_t *pcur = src, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
+    for(uint32_t i = 0; i < 2; i++) {
+        uint32_t dist = dists[i];
+        if (dist >= vld_rge_) continue;
+        uint32_t cmp_pos = wpos >= dist ? wpos - dist : wpos + wnd_size_ - dist;
+        uint32_t climit = MIN(limit, 24);
+        climit = MIN(limit, wnd_size_ - cmp_pos);
+        uint8_t *pcur = src, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
 
-    while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
-        pmatch += 4; pcur += 4; }
-    if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
-        pmatch += 2; pcur += 2; }
-    if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
-    if (pcur - src > 18)
-        return true;
-    else
-        return false;
+        while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
+            pmatch += 4; pcur += 4; }
+        if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
+            pmatch += 2; pcur += 2; }
+        if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        if (pcur - src > 18)
+            return true;
+    }
+    return false;
 }
 
 bool MatchFinder::SecondMatchBetter(MFUnit u1, MFUnit u2)
 {
-    static const uint32_t cof[] = {0, 5, 9, 13};
+    static const uint32_t cof[] = {0, 4, 8, 12};
     return (u2.len > 1 && (
                 (u2.len > u1.len + 3)
                 || (u2.len > u1.len && u2.dist <= 4)
                 || (u2.len + 2 > u1.len && u2.dist <= 4 && u1.dist > 4)
-                || (u2.len >= u1.len && u1.dist > 4 
-                    && (u2.dist >> cof[u2.len - u1.len]) < u1.dist)
+                || (u2.len >= u1.len //&& u1.dist > 4 
+                    && (u2.dist >> cof[u2.len - u1.len]) <= u1.dist)
                 || (u2.len < u1.len && u2.len + 2 >= u1.len && u1.dist > 4 
                     && (u1.dist >> cof[u1.len - u2.len]) > u2.dist)
                 ));

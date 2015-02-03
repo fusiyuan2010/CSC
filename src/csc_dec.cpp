@@ -87,7 +87,8 @@ class CSCDecoder
         uint32_t slot, num;
         DecodeDirect(this, slot, 5);
         DecodeDirect(this, num, slot == 0? 1 : slot);
-        num += (1 << slot);
+        if (slot)
+            num += (1 << slot);
         return num;
     }
 
@@ -588,6 +589,27 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
                 return DECODE_ERROR;
             }
             break;
+    }
+    if (decode_int() == 1) {
+        // entropy coder init
+        rc_low_ = 0;
+        rc_range_ = 0xFFFFFFFF;
+        rc_cachesize_ = 1;
+        rc_cache_ = 0;
+        rc_code_=0;
+        outsize_ += bc_size_ + rc_size_;
+        rc_size_ = bc_size_ = 0;
+        bc_curbits_ = bc_curval_ =0;
+        prc_ = rc_buf_;
+        pbc_ = bc_buf_;
+        io_->ReadRCData(rc_buf_, rc_bufsize_);
+        io_->ReadBCData(bc_buf_, bc_bufsize_);
+        rc_code_ = ((uint32_t)prc_[1] << 24) 
+            | ((uint32_t)prc_[2] << 16) 
+            | ((uint32_t)prc_[3] << 8) 
+            | ((uint32_t)prc_[4]);
+        prc_ += 5;
+        rc_size_ += 5;
     }
     return ret;
 }

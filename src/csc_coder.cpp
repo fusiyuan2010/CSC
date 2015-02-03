@@ -55,11 +55,19 @@ void Coder::Flush()
         BCWCheckBound();
     }
 
-    bc_curval_=0;
-    bc_curbits_=0;
-
+    outsize_ += rc_size_ + bc_size_;
     io_->WriteRCData(rc_buf_,rc_size_);
     io_->WriteBCData(bc_buf_,bc_size_);
+
+    rc_low_ = 0;
+    rc_range_ = 0xFFFFFFFF;
+    rc_cachesize_ = 1;
+    rc_cache_ = 0;
+    rc_code_=0;
+    rc_size_ = bc_size_ = 0;
+    bc_curbits_ = bc_curval_ = 0;
+    prc_ = rc_buf_;
+    pbc_ = bc_buf_;
 }
 
 void Coder::EncDirect16(uint32_t val,uint32_t len)

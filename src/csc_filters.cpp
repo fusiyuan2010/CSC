@@ -137,8 +137,8 @@ void Filters::Destroy()
 
 void Filters::Forward_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 {
-	uint32_t dstPos,i,j,prevByte = 0;
-	uint32_t lastDelta;
+	uint32_t dstPos,i,j;
+    uint8_t prevByte = 0;
 
 	if (size<512)
 		return;
@@ -153,10 +153,8 @@ void Filters::Forward_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 	memcpy(m_fltSwapBuf, src, size);
 
 	dstPos = 0;
-	lastDelta = 0;
 
 	for (i=0;i<chnNum;i++) {
-        int32_t prev1 = 0, prev2 = 0;
 		for(j=i;j<size;j+=chnNum)
 		{
 			src[dstPos++]=m_fltSwapBuf[j]-prevByte;
@@ -171,6 +169,7 @@ void Filters::Forward_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 }
 
 
+/*
 void Filters::Forward_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t colorBits)
 {
 	if (size<512)
@@ -212,30 +211,11 @@ void Filters::Forward_RGB(uint8_t *src,uint32_t size,uint32_t width,uint32_t col
 			vLeft=newSrc[j-channelNum];
 			vUpper=newSrc[j-channelNum*width];
 			vUpperLeft=newSrc[j-channelNum*(width+1)];
-			/*vPredict=(vLeft*3+vUpper*3+vUpperLeft*2)/8;
-			pa=abs((int)vUpper-vUpperLeft);
-			pb=abs((int)vLeft-vUpperLeft);
-			if (pa<pb)
-			vPredict=vLeft;
-			else
-			vPredict=vUpper;*/
 			vPredict=((int)vLeft+vUpper-vUpperLeft);
 			if (vPredict>255)
 				vPredict=255;
 			if (vPredict<0)
 				vPredict=0;
-			/*vPredict=((int)vLeft+vUpper-vUpperLeft);
-			pa=abs(vPredict-vLeft);
-			pb=abs(vPredict-vUpper);
-			pc=abs(vPredict-vUpperLeft);
-			if (pa<=pb && pa<=pc)
-			vPredict=vLeft;
-			else
-			if (pb<=pc)
-			vPredict=vUpper;
-			else
-			vPredict=vUpperLeft;*/
-
 			src[dstPos++]=vPredict-newSrc[j];
 
 			totalTest+=abs(newSrc[j]-vPredict);
@@ -276,6 +256,7 @@ void Filters::Inverse_Audio(uint8_t *src,uint32_t size,uint32_t width,uint32_t c
 {
 }
 
+*/
 
 uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 {
@@ -292,7 +273,6 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 
 	uint8_t *dst=m_fltSwapBuf;
 	uint32_t i,j,treePos=0;
-	uint32_t lastSymbol=0; 
 	uint32_t dstSize=0;
 	uint32_t idx;
 
@@ -331,7 +311,6 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 				i+=longestWord;
 				continue;
 			}
-			lastSymbol=0;
 			dst[dstSize++]=src[i];
 			i++;
 		}
@@ -345,7 +324,6 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 			else
 				dst[dstSize++]=src[i];
 
-			lastSymbol=0;
 			treePos=0;
 			i++;
 		}
@@ -382,41 +360,33 @@ void Filters::Inverse_Dict(uint8_t *src,uint32_t size)
 		if (m_fltSwapSize>0)
 			free(m_fltSwapBuf);
 
-		m_fltSwapBuf=(uint8_t*)malloc(size);
-		m_fltSwapSize=size;
+		m_fltSwapBuf = (uint8_t*)malloc(size);
+		m_fltSwapSize = size;
 	}
 
 	uint8_t *dst=m_fltSwapBuf;
 	uint32_t i=0,j;
 	uint32_t dstPos=0,idx;
 
-	while(dstPos<size)
-	{
-		if (src[i]>=0x82 && src[i]<maxSymbol)	
-		{
+	while(dstPos<size) {
+		if (src[i]>=0x82 && src[i]<maxSymbol) {
 			idx=wordIndex[src[i]];
 			for(j=0;wordList[idx][j];j++)
 				dst[dstPos++]=wordList[idx][j];
-		}
-		else if (src[i]==254 && (i+1<size && src[i+1]>=0x82))// && src[i+1]<maxSymbol))
-		{
+		} else if (src[i]==254 && (i+1<size && src[i+1]>=0x82)) { // && src[i+1]<maxSymbol))
 			i++;
 			dst[dstPos++]=src[i];
-		}
-		else 
+		} else 
 			dst[dstPos++]=src[i];
-
 		i++;
 	}
-
-	memcpy(src,dst,size);
+	memcpy(src, dst, size);
 }
 
 
 void Filters::Inverse_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 {
 	uint32_t dstPos,i,j,prevByte;
-	uint32_t lastDelta;
 
 	if (size<512) 
 		return;
@@ -433,7 +403,6 @@ void Filters::Inverse_Delta(uint8_t *src,uint32_t size,uint32_t chnNum)
 
 	dstPos=0;
 	prevByte=0;
-	lastDelta=0;
 	for (i=0;i<chnNum;i++)
 		for(j=i;j<size;j+=chnNum)
 		{
@@ -633,26 +602,26 @@ int32_t Filters::E89flush()
 }
 
 
-void Filters::Forward_E89( uint8_t* src, uint32_t size ) 
+void Filters::Forward_E89(uint8_t* src, uint32_t size) 
 {
-	int32_t i,j,c;
+    uint32_t i, j;
+    int32_t c;
 	E89init();
-	for( i=0,j=0; i<size; i++ ) {
+	for(i=0,j=0; i<size; i++ ) {
 		c = E89forward( src[i] );
 		if( c>=0 ) src[j++]=c;
 	}
 	while( (c=E89flush())>=0 ) src[j++]=c;
 }
 
-void Filters::Inverse_E89( uint8_t* src, uint32_t size ) 
+void Filters::Inverse_E89(uint8_t* src, uint32_t size) 
 {
-
-	int32_t i,j,c;
-
+    uint32_t i, j;
+    int32_t c;
 	E89init();
-	for( i=0,j=0; i<size; i++ ) {
+	for(i=0,j=0; i<size; i++ ) {
 		c = E89inverse( src[i] );
-		if( c>=0 ) src[j++]=c;
+		if( c>=0 ) src[j++] = c;
 	}
 	while( (c=E89flush())>=0 ) src[j++]=c;
 }
