@@ -99,7 +99,7 @@ uint64_t CSCEnc_EstMemUsage(const CSCProps *p)
     if (p->hash_width)
         ret += (p->hash_width * (1 << p->hash_bits)) * sizeof(uint32_t);
     ret += 80 * KB *sizeof(uint32_t);
-    ret += 256 * 256 * sizeof(uint32_t);
+    ret += 256 * 256 * sizeof(uint32_t) * 2;
     ret += 2 * MB;
     return ret;
 }
@@ -114,8 +114,11 @@ CSCEncHandle CSCEnc_Create(const CSCProps *props,
     csc->raw_blocksize = props->raw_blocksize;
 
     csc->encoder = new CSCEncoder();
-    csc->encoder->Init(props, csc->io);
-    return (void*)csc;
+    if (csc->encoder->Init(props, csc->io) < 0) {
+        CSCEnc_Destroy((void *)csc);
+        return NULL;
+    } else
+        return (void*)csc;
 }
 
 void CSCEnc_Destroy(CSCEncHandle p)
@@ -156,11 +159,16 @@ int CSCEnc_Encode(CSCEncHandle p,
         ret = is->Read(is, buf, &size);
         if (ret >= 0 && size) {
             insize += size;
-            csc->encoder->Compress(buf, size);
             ret = 0;
+            try {
+                csc->encoder->Compress(buf, size);
+            } catch (int errcode) {
+                ret = errcode;
+            }
             if (progress)
                 progress->Progress(progress, insize, csc->encoder->GetCompressedSize());
-        }
+        } else if (ret < 0)
+            ret = READ_ERROR;
 
         if (ret < 0 || size < csc->raw_blocksize)
             break;

@@ -17,14 +17,17 @@ int CSCEncoder::Init(const CSCProps *p, MemIO *io)
         return -1;
 
     p_ = *p;
-    if (lz_.Init(p, &model_) < 0)
+    if (lz_.Init(p, &model_) < 0) {
+        filters_.Destroy();
+        coder_.Destroy();
+        model_.Destroy();
         return -1;
+    }
 
     if (p->DLTFilter + p->EXEFilter + p->TXTFilter == 0)
         use_filters_ = false;
     else
         use_filters_ = true;
-
     return 0;
 }
 

@@ -35,7 +35,7 @@ int LZ::Init(const CSCProps *p, Model *model)
 
 FREE_ON_ERROR:
     free(wnd_);
-    return CANT_ALLOC_MEM;
+    return -1;
 }
 
 
@@ -268,11 +268,17 @@ void LZ::compress_advanced(uint32_t size)
 
                 if (apcur == aplimit) {
                     ap_backward(apcur);
-                    rep_dist_[0] = apunits_[apcur].rep_dist[0];
-                    rep_dist_[1] = apunits_[apcur].rep_dist[1];
-                    rep_dist_[2] = apunits_[apcur].rep_dist[2];
-                    rep_dist_[3] = apunits_[apcur].rep_dist[3];
                     i += apcur;
+                    break;
+                }
+
+                if (appt_[0].len == 1 && apcur + 1 == apend) {
+                    ap_backward(apcur);
+                    model_->EncodeLiteral(apunits_[apcur].lit);
+                    i += apcur;
+                    mf_.SlidePos(wnd_curpos_, 1, size - i);
+                    wnd_curpos_ ++;
+                    i++;
                     break;
                 }
 
@@ -282,10 +288,6 @@ void LZ::compress_advanced(uint32_t size)
                 if (appt_[0].len >= good_len_ || (appt_[0].len > 1 && appt_[0].len + apcur >= aplimit)) {
                     ap_backward(apcur);
                     i += apcur;
-                    rep_dist_[0] = apunits_[apcur].rep_dist[0];
-                    rep_dist_[1] = apunits_[apcur].rep_dist[1];
-                    rep_dist_[2] = apunits_[apcur].rep_dist[2];
-                    rep_dist_[3] = apunits_[apcur].rep_dist[3];
                     encode_nonlit(appt_[0]);
                     mf_.SlidePos(wnd_curpos_, appt_[0].len, size - i);
                     i += appt_[0].len;
@@ -351,6 +353,10 @@ void LZ::ap_backward(int end)
         }
         i = next;
     }
+    rep_dist_[0] = apunits_[end].rep_dist[0];
+    rep_dist_[1] = apunits_[end].rep_dist[1];
+    rep_dist_[2] = apunits_[end].rep_dist[2];
+    rep_dist_[3] = apunits_[end].rep_dist[3];
 }
 
 

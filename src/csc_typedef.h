@@ -16,17 +16,17 @@ const uint32_t MinDictSize = 32 * KB;//Don't change
 
 
 /*****ERRORS*****************/
-#define NO_ERROR 0
+/*
 #define CANT_OPEN_FILE (-100)
 #define CANT_CREATE_FILE (-99)
 #define NOT_CSC_FILE (-98)
 #define VERSION_INVALID (-97)
 #define CSC_FILE_INVALID (-95)
-#define DECODE_ERROR (-96)
 #define CANT_ALLOC_MEM (-94)
 #define ALREADY_INITIALIZED (-93)
 #define OPERATION_ERROR (-92)
 #define FILE_DIDNT_OPEN (-91)
+*/
 /*****ERRORS*****************/
 
 /******Block Type*************/

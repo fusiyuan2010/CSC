@@ -13,7 +13,8 @@
         coder->rc_size_++;\
         if (coder->rc_size_==coder->rc_bufsize_) {\
             coder->outsize_+=coder->rc_size_;\
-            coder->io_->ReadRCData(coder->rc_buf_,coder->rc_bufsize_);\
+            if (coder->io_->ReadRCData(coder->rc_buf_,coder->rc_bufsize_) < 0)\
+                throw (int)READ_ERROR;\
             coder->rc_size_=0;\
             coder->prc_ = coder->rc_buf_;\
         }\
@@ -65,7 +66,8 @@ class CSCDecoder
 #define BCRCheckBound() do{if (bc_size_ == bc_bufsize_) \
         {\
             outsize_ += bc_size_;\
-            io_->ReadBCData(bc_buf_, bc_bufsize_);\
+            if (io_->ReadBCData(bc_buf_, bc_bufsize_) < 0)\
+                throw (int)READ_ERROR;\
             bc_size_ = 0;\
             pbc_ = bc_buf_;\
         }}while(0)
@@ -346,7 +348,7 @@ public:
 
 FREE_ON_ERROR:
         Destroy();
-        return CANT_ALLOC_MEM;
+        return -1;
     }
 
     void Destroy()
@@ -630,7 +632,10 @@ CSCDecHandle CSCDec_Create(const CSCProps *props, ISeqInStream *instream)
     csc->raw_blocksize = props->raw_blocksize;
 
     csc->decoder = new CSCDecoder();
-    csc->decoder->Init(csc->io, props->dict_size, props->csc_blocksize);
+    if (csc->decoder->Init(csc->io, props->dict_size, props->csc_blocksize) < 0) {
+        CSCDec_Destroy((void *)csc);
+        return NULL;
+    }
     return (void*)csc;
 }
 
@@ -661,7 +666,13 @@ int CSCDec_Decode(CSCDecHandle p,
 
     for(;;) {
         uint32_t size;
-        ret = csc->decoder->Decompress(buf, &size, csc->raw_blocksize);
+        try {
+            // IOCallback error will not be passed by return value.
+            // Instead, use exception
+            ret = csc->decoder->Decompress(buf, &size, csc->raw_blocksize);
+        } catch (int errcode) {
+            ret = errcode;
+        }
         if (ret == 0)
             outsize += size;
 
@@ -673,7 +684,7 @@ int CSCDec_Decode(CSCDecHandle p,
 
         size_t wrote = os->Write(os, buf, size);
         if (wrote < size) {
-            ret = -1;
+            ret = WRITE_ERROR;
             break;
         }
     }

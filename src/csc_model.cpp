@@ -71,9 +71,9 @@ int Model::Init(Coder *coder)
     p_delta_=NULL;
     p_lit_ = (uint32_t*)malloc(256 * 256 * sizeof(uint32_t));
     if (!p_lit_)
-        return CANT_ALLOC_MEM;
+        return -1;
 
-    return NO_ERROR;
+    return 0;
 }
 
 void Model::Destroy()

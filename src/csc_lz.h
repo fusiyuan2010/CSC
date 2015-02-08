@@ -39,7 +39,7 @@ private:
         uint32_t rep_dist[4];
     };
 // ===========================
-    static const int AP_LIMIT = 4096;
+    static const int AP_LIMIT = 2048;
     APUnit apunits_[AP_LIMIT + 1];
 
     void compress_normal(uint32_t size, bool lazy);

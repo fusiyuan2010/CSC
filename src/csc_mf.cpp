@@ -402,6 +402,7 @@ MAIN_MF:
             ht6[i] = ht6[i-1];
         ht6[0] = pos_;
     }
+
     if (++pos_ >= 0xFFFFFFF0) normalize();
     return cnt;
 }
