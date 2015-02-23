@@ -279,7 +279,7 @@ uint32_t Model::GetRepDistPrice(uint32_t fstate,uint32_t rep_idx)
     uint32_t i = 1, j;
     j = (rep_idx >> 1) & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); i += i + j;
     j = rep_idx & 1; FEncodeBit(ret, j, p_repdist_[fstate * 3 + i - 1]); 
-    return ret;
+    return ret; //ret > 256  ? ret - 256 : 0;
 }
 
 uint32_t Model::GetMatchLenPrice(uint32_t fstate,uint32_t matchLen)

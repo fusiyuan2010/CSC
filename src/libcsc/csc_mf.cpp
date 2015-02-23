@@ -50,12 +50,13 @@ int MatchFinder::Init(uint8_t *wnd,
         size_ += bt_size_ * 2;
     }
 
-    mfbuf_ = (uint32_t *)malloc(sizeof(uint32_t) * size_);
-    if (!mfbuf_)
+    mfbuf_raw_ = (uint32_t *)malloc(sizeof(uint32_t) * size_ + 128);
+    if (!mfbuf_raw_)
         return -1;
+    mfbuf_ = (uint32_t*)((uint8_t *)mfbuf_raw_ + (64 - ((uint64_t)(mfbuf_raw_) & 0x7F)));
     memset(mfbuf_, 0, size_ * sizeof(uint32_t));
 
-    uint32_t cpos = 0;
+    uint64_t cpos = 0;
     ht2_ = mfbuf_ + cpos;
     cpos += HT2_SIZE_;
     ht3_ = mfbuf_ + cpos;
@@ -87,7 +88,7 @@ void MatchFinder::normalize()
 
 void MatchFinder::Destroy()
 {
-    free(mfbuf_);
+    free(mfbuf_raw_);
 }
 
 void MatchFinder::SetArg(int bt_cyc, int ht_cyc, int ht_low, int good_len)

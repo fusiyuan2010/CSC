@@ -223,10 +223,10 @@ uint32_t Analyzer::Analyze(uint8_t *src, uint32_t size, uint32_t *bpb)
 	for(uint32_t i='a';i<='z';i++)
 		alpha_num += freq[i];
 	
-	if (freq0x80[1] < (size >> 3) && (freq[' '] > (size >> 7)) 
+	if (freq0x80[1] < (size >> 3) && (freq[' '] + freq['\n'] + freq[':'] + freq['.'] + freq['/'] > (size >> 6)) 
 		&& (freq['a'] + freq['e'] + freq['t'] > (size >> 4)) 
 		&& entropy > 300 * size 
-		&& alpha_num > (size >> 2))
+		&& alpha_num > (size / 3))
 		return DT_ENGTXT;
 
 	if (freq[0x8b] > avgFreq && freq[0x00] > avgFreq * 2 && freq[0xE8] > 6)

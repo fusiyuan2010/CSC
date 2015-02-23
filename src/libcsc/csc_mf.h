@@ -22,6 +22,7 @@ class MatchFinder {
     uint32_t vld_rge_; // valid range, wnd_size - blocksize
 
 
+    uint32_t *mfbuf_raw_;
     uint32_t *mfbuf_;
     uint32_t *ht2_;
     uint32_t *ht3_;
@@ -38,7 +39,7 @@ class MatchFinder {
     uint32_t bt_size_;
 
     uint32_t bt_pos_;
-    uint32_t size_;
+    uint64_t size_;
 
     uint32_t ht_cyc_;
     uint32_t bt_cyc_;
