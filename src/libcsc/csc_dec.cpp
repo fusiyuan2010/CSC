@@ -683,7 +683,9 @@ int CSCDec_Decode(CSCDecHandle p,
             break;
 
         size_t wrote = os->Write(os, buf, size);
-        if (wrote < size) {
+        if (wrote == CSC_WRITE_ABORT)
+            break;
+        else if (wrote < size) {
             ret = WRITE_ERROR;
             break;
         }

@@ -23,6 +23,10 @@ public:
     return ftello(in);
   }
 
+  uint32_t read(char *buf, uint32_t size) {
+      return fread(buf, 1, size, in);
+  }
+
   // Set file position
   void seek(int64_t pos, int whence) {
     if (whence==SEEK_CUR) {
@@ -33,7 +37,7 @@ public:
   }
 
   // Close file if open
-  void close() {if (in) fclose(in);}
+  void close() {if (in) fclose(in); in = 0;}
   ~InputFile() {close();}
 };
 
@@ -59,7 +63,9 @@ public:
   }
 
   // Write bufp[0..size-1]
-  void write(const char* bufp, int size);
+  void write(const char* bufp, int size) {
+      fwrite(bufp, 1, size, out);
+  }
 
   // Write size bytes at offset
   void write(const char* bufp, int64_t pos, int size) {

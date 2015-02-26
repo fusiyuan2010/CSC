@@ -80,6 +80,7 @@ private:
 
 #endif
 
+/*
 class Task {
 public:
     virtual void Run() = 0;
@@ -137,6 +138,7 @@ public:
     ThreadWorker *graspWorker();
     void releaseWorker();
 };
+*/
 
 
 #endif

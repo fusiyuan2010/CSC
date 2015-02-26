@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <csc_enc.h>
+#include <csc_dec.h>
 
 using namespace std;
 
@@ -111,6 +112,7 @@ inline int tolowerW(int c) {
 
 #include <csa_thread.h>
 #include <csa_file.h>
+#include <compressor.h>
 
 // Return true if strings a == b or a+"/" is a prefix of b
 // or a ends in "/" and is a prefix of b.
@@ -312,8 +314,20 @@ int CSArc::ParseArg(int argc, char *argv[])
    */
 }
 
+int show_progress(void *p, UInt64 insize, UInt64 outsize)
+{
+    (void)p;
+    printf("\r%llu -> %llu\t\t\t\t", insize, outsize);
+    fflush(stdout);
+    return 0;
+}
+
+
 int CSArc::Add()
 {
+    vector<FileBlock> filelist;
+    vector<FileBlock> outlist;
+
     for (int i = 0; i < filenames_.size(); ++i) {
         printf("Filenames: %s\n", filenames_[i].c_str());
         scandir(filenames_[i].c_str(), recurse_);
@@ -321,8 +335,46 @@ int CSArc::Add()
 
     for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
         printf("%s: %lld\n", it->first.c_str(), it->second.esize);
+        FileBlock b;
+        b.filename = it->first;
+        b.off = 0;
+        b.size = it->second.esize;
+        filelist.push_back(b);
     }
 
+    {
+        FileBlock b;
+        b.filename = arcname_;
+        b.off = 0;
+        b.posblock = 0;
+        b.size = 0xFFFFFFFFFFFF;
+        outlist.push_back(b);
+    }
+
+    Reader reader;
+    reader.ar = new AsyncReader(filelist, 32 * 1048576);
+    reader.is.Read = read_proc;
+
+    Writer writer;
+    writer.aw = new AsyncWriter(outlist, 8 * 1048576);
+    writer.os.Write = write_proc;
+
+
+    ICompressProgress prog;
+    prog.Progress = show_progress;
+
+    CSCProps p;
+    CSCEncProps_Init(&p, 64 * 1048576, 1);
+    CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&writer);
+    CSCEnc_Encode(h, (ISeqInStream*)&reader, &prog);
+    CSCEnc_Encode_Flush(h);
+    CSCEnc_Destroy(h);
+
+    reader.ar->Finish();
+    writer.aw->Finish();
+    delete writer.aw;
+    delete reader.ar;
+    
     printf("Arc: %s\n", arcname_.c_str());
     return 0;
 }

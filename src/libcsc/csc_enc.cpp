@@ -171,7 +171,7 @@ int CSCEnc_Encode(CSCEncHandle p,
         } else if (ret < 0)
             ret = READ_ERROR;
 
-        if (ret < 0 || size < csc->raw_blocksize)
+        if (ret < 0 || size == 0)
             break;
     }
     delete []buf;
