@@ -149,6 +149,19 @@ class CSCDecoder
         return ctx_;
     }
 
+    void decode_literals(uint8_t *dst, uint32_t *size) {
+        *size = decode_int();
+        for(uint32_t i = 0; i < *size; i++) {
+            uint32_t c = 1, *p;
+            p = &p_lit_[ctx_ * 256];
+            do { 
+                DecodeBit(this, c, p[c]);
+            } while (c < 0x100);
+            ctx_ = c & 0xFF;
+            dst[i] = ctx_;
+        }
+    }
+
     uint32_t decode_matchlen_1() {
         uint32_t v = 0, lenbase;
         uint32_t *p;
@@ -558,6 +571,10 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
             break;
         case DT_BAD:
             decode_bad(dst, size);
+            lz_copy2dict(dst, *size);
+            break;
+        case DT_ENTROPY:
+            decode_literals(dst, size);
             lz_copy2dict(dst, *size);
             break;
         //case DT_HARD:

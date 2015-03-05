@@ -54,6 +54,7 @@ void LZ::Destroy(void)
 {
     mf_.Destroy();
     free(wnd_);
+    free(appt_);
 }
 
 void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
@@ -100,7 +101,7 @@ void LZ::EncodeNormal(uint8_t *src, uint32_t size, uint32_t lz_mode)
 bool LZ::IsDuplicateBlock(uint8_t *src, uint32_t size)
 {
     uint32_t mc = 0;
-    for(uint32_t i = 0; i < size; i += 7) 
+    for(uint32_t i = 0; i < size; i ++) 
         if (mf_.TestFind(wnd_curpos_, src + i, size - i)) {
             mc++;
             if (mc)

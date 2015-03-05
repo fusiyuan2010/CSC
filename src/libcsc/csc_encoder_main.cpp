@@ -60,6 +60,10 @@ void CSCEncoder::compress_block(uint8_t *src,uint32_t size, uint32_t type)
         model_.EncodeInt(type);
         lz_.EncodeNormal(src, size, 5);
         model_.CompressBad(src, size);
+    } else if (type == DT_ENTROPY) {
+        model_.EncodeInt(type);
+        lz_.EncodeNormal(src, size, 5);
+        model_.CompressLiterals(src, size);
     } else if (type >= DT_DLT && type < DT_DLT + DLT_CHANNEL_MAX) {
         uint32_t chnNum = DltIndex[type - DT_DLT];
         model_.EncodeInt(type);
@@ -164,6 +168,7 @@ void CSCEncoder::Destroy()
     coder_.Destroy();
     lz_.Destroy();
     model_.Destroy();
+    filters_.Destroy();
 }
 
 int64_t CSCEncoder::GetCompressedSize()

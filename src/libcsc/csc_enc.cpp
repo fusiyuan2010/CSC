@@ -55,27 +55,28 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
             p->hash_width = 1;
             p->lz_mode = 2;
             p->bt_size = 0;
-            p->hash_bits += 2;
+            p->hash_bits ++;
             break;
         case 2:
             p->hash_width = 8;
             p->lz_mode = 2;
             p->bt_size = 0;
             p->good_len = 24;
+            p->hash_bits --;
             break;
         case 3:
             p->hash_width = 2;
             p->lz_mode = 3;
             p->bt_size = 0;
-            p->good_len = 18;
-            p->hash_bits += 2;
+            p->good_len = 16;
+            p->hash_bits ++;
             break;
         case 4:
             p->hash_width = 8;
             p->lz_mode = 3;
             p->bt_size = 0;
-            p->bt_cyc = 18;
             p->good_len = 24;
+            p->hash_bits --;
             break;
         case 5:
             p->lz_mode = 3;

@@ -474,7 +474,6 @@ void Model::DecompressDelta(uint8_t *dst,uint32_t *size)
     }
     return;
 }
-*/
 
 void Model::CompressHard(uint8_t *src,uint32_t size)
 {
@@ -502,7 +501,6 @@ void Model::CompressHard(uint8_t *src,uint32_t size)
     return;
 }
 
-/*
 void Model::DecompressHard(uint8_t *dst,uint32_t *size)
 {
     uint32_t c,i;
@@ -526,6 +524,20 @@ void Model::DecompressHard(uint8_t *dst,uint32_t *size)
 }
 */
 
+void Model::CompressLiterals(uint8_t *src,uint32_t size)
+{
+    EncodeInt(size);
+    for(uint32_t i = 0; i < size; i++) {
+        uint32_t c  = src[i];
+        uint32_t *p = &p_lit_[ctx_ * 256];
+        ctx_ = (c >> 0);
+        c = c | 0x100;
+        do {
+            EncodeBit(coder_,(c >> 7) & 1,p[c>>8]);
+            c <<= 1;
+        } while (c < 0x10000);
+    }
+}
 
 void Model::CompressBad(uint8_t *src,uint32_t size)
 {

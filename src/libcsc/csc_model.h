@@ -76,9 +76,9 @@ public:
     void CompressDelta(uint8_t *src,uint32_t size);
     //void DecompressDelta(uint8_t *dst,uint32_t *size);
 
-    void CompressHard(uint8_t *src,uint32_t size);
+    //void CompressHard(uint8_t *src,uint32_t size);
     //void DecompressHard(uint8_t *dst,uint32_t *size);
-
+    void CompressLiterals(uint8_t *src,uint32_t size);
     void CompressBad(uint8_t *src,uint32_t size);
 
     void CompressRLE(uint8_t *src,uint32_t size);

@@ -96,7 +96,7 @@ int MemIO::WriteBlock(uint8_t *buffer, uint32_t size, int rc1bc0)
             return -1;
     }
     iosize = size;
-    if (os_->Write(os_, buffer, iosize) != iosize)
+    if (iosize && os_->Write(os_, buffer, iosize) != iosize)
         return -1;
     return size;
 }

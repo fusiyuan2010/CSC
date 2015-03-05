@@ -13,6 +13,7 @@
 #define DECODE_ERROR (-96)
 #define WRITE_ERROR (-97)
 #define READ_ERROR (-98)
+const size_t CSC_WRITE_ABORT = 0xFFFFFFFFFFFFFFFF;
 
 typedef struct _CSCProps {
     // LZ77 dictionary size, 32 KB to 1GB, real size is 8KB less

@@ -41,6 +41,7 @@ const uint32_t DT_NO_LZ = 0x05;
 
 //const uint32_t DT_AUDIO = 0x06;
 //const uint32_t DT_AUDIO = 0x06;
+const uint32_t DT_ENTROPY = 0x07;
 const uint32_t DT_BAD = 0x08;
 const uint32_t SIG_EOF = 0x09;
 const uint32_t DT_DLT = 0x10;

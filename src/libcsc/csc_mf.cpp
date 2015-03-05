@@ -53,7 +53,7 @@ int MatchFinder::Init(uint8_t *wnd,
     mfbuf_raw_ = (uint32_t *)malloc(sizeof(uint32_t) * size_ + 128);
     if (!mfbuf_raw_)
         return -1;
-    mfbuf_ = (uint32_t*)((uint8_t *)mfbuf_raw_ + (64 - ((uint64_t)(mfbuf_raw_) & 0x7F)));
+    mfbuf_ = (uint32_t*)((uint8_t *)mfbuf_raw_ + (64 - ((uint64_t)(mfbuf_raw_) & 0x3F)));
     memset(mfbuf_, 0, size_ * sizeof(uint32_t));
 
     uint64_t cpos = 0;
@@ -181,9 +181,16 @@ void MatchFinder::SlidePos(uint32_t wnd_pos, uint32_t len, uint32_t limit)
 void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
 {
     uint32_t h;
-    for(uint32_t i = 0; i < len; i++) {
+    for(uint32_t i = 0; i < len; ) {
         uint32_t wpos = wnd_pos + i;
         if (pos_ >= 0xFFFFFFF0) normalize();
+        h = HASH2(wnd_ + wpos);
+        if (h % 16) {
+            // for 'BAD' data, only a small subset of data will be test by MF
+            i++;
+            pos_++;
+            continue;
+        }
 
         if (ht_width_) {
             h = HASH6(wnd_ + wpos, ht_bits_);
@@ -200,7 +207,9 @@ void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
             bt_head_[h] = pos_;
             bt_pos_++;
         }
-        pos_++;
+
+        i ++;
+        pos_ ++;
     }
 }
 
@@ -439,19 +448,25 @@ MFUnit MatchFinder::FindMatch(uint32_t *rep_dist, uint32_t wnd_pos, uint32_t lim
 
 bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
 {
-    uint32_t dists[2] = {wnd_size_, wnd_size_};
+    uint32_t dists[8] = {wnd_size_, wnd_size_};
+    uint32_t depth = 0;
+    uint32_t h = HASH2(src);
+    if (h % 16)
+        // for 'BAD' data, only a small subset of data will be test by MF
+        return false;
 
     if (ht_width_) {
-        uint32_t h = HASH6(src, ht_bits_);
-        dists[0] = pos_ - ht6_[h * ht_width_];
+        h = HASH6(src, ht_bits_);
+        //for(uint32_t i = 0; i < ht_width_ && i < 8; i++)
+        dists[depth++] = pos_ - ht6_[h * ht_width_];
     } 
 
     if (bt_head_) {
-        uint32_t h = HASH6(src, bt_bits_);
-        dists[1] = pos_ - bt_head_[h];
+        h = HASH6(src, bt_bits_);
+        dists[depth++] = pos_ - bt_head_[h];
     }
 
-    for(uint32_t i = 0; i < 2; i++) {
+    for(uint32_t i = 0; i < depth; i++) {
         uint32_t dist = dists[i];
         if (dist >= vld_rge_) continue;
         uint32_t cmp_pos = wpos >= dist ? wpos - dist : wpos + wnd_size_ - dist;

@@ -42,8 +42,8 @@ void Coder::Flush()
     {
         RC_ShiftLow();
     }
-    prc_++;
-    rc_size_++;
+    //prc_++;
+    //rc_size_++;
 
     //one more byte for bitcoder is to prevent overflow while reading
     for(int i = 0; i < 2; i++) {

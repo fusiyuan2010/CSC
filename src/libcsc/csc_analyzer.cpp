@@ -216,14 +216,13 @@ uint32_t Analyzer::Analyze(uint8_t *src, uint32_t size, uint32_t *bpb)
 		freq0x80[i >> 7] += freq[i];
 	}
     *bpb = entropy / size;
-
 	avgFreq = size >> 8;
 
 	alpha_num = 0;
 	for(uint32_t i='a';i<='z';i++)
 		alpha_num += freq[i];
 	
-	if (freq0x80[1] < (size >> 3) && (freq[' '] + freq['\n'] + freq[':'] + freq['.'] + freq['/'] > (size >> 6)) 
+	if (freq0x80[1] < (size >> 3) && (freq[' '] + freq['\n'] + freq[':'] + freq['.'] + freq['/'] > (size >> 4)) 
 		&& (freq['a'] + freq['e'] + freq['t'] > (size >> 4)) 
 		&& entropy > 300 * size 
 		&& alpha_num > (size / 3))
@@ -231,6 +230,9 @@ uint32_t Analyzer::Analyze(uint8_t *src, uint32_t size, uint32_t *bpb)
 
 	if (freq[0x8b] > avgFreq && freq[0x00] > avgFreq * 2 && freq[0xE8] > 6)
 		return DT_EXE;
+
+    if (entropy > (log((double)diffNum - 2) / log((double)2) - 0.6) * 100.0 * size  && diffNum < 16 && diffNum >= 6)
+        return DT_ENTROPY;
 
 	if (entropy < 400 * size && diffNum < 200)
 		return DT_NORMAL;
