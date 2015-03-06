@@ -110,9 +110,11 @@ inline int tolowerW(int c) {
   return c;
 }
 
+#include <csa_typedef.h>
 #include <csa_thread.h>
 #include <csa_file.h>
-#include <compressor.h>
+#include <csa_io.h>
+#include <csa_indexpack.h>
 
 // Return true if strings a == b or a+"/" is a prefix of b
 // or a ends in "/" and is a prefix of b.
@@ -141,88 +143,6 @@ bool ispath(const char* a, const char* b) {
   return *b==0 || *b=='/';
 }
 
-
-char *Put8(uint64_t i, char *buf)
-{
-    for(int j = 0; j < 8; j++) {
-        *buf++ = (i & 0xFF);
-        i >>= 8;
-    }
-    return buf;
-}
-
-uint64_t Get8(char *buf)
-{
-}
-
-char *Put4(uint32_t i, char *buf)
-{
-    for(int j = 0; j < 4; j++) {
-        *buf++ = (i & 0xFF);
-        i >>= 8;
-    }
-    return buf;
-}
-
-uint32_t Get4(char *buf)
-{
-}
-
-char *Put2(uint16_t i, char *buf)
-{
-    *buf++ = (i & 0xFF);
-    *buf++ = (i >> 8);
-    return buf;
-}
-
-uint16_t Get2(char *buf)
-{
-}
-
-struct FileEntry {
-  int64_t edate;         // date of external file, 0=not found
-  int64_t esize;         // size of external file
-  int64_t eattr;         // external file attributes ('u' or 'w' in low byte)
-  struct PosInBlock {
-      uint32_t bid;
-      uint64_t posblock;
-      uint64_t size;
-      uint64_t posfile;
-  };
-  vector<PosInBlock> frags;
-};
-
-typedef map<string, FileEntry> FileIndex;
-typedef FileIndex::iterator IterFileEntry;
-
-uint64_t SerializedSize(IterFileEntry it)
-{
-    return 4 + it->first.size()
-        // file name len
-        + 3 * 8 + 1 
-        // data size eattr, frags num
-        + it->second.frags.size() * (4 + 24);
-        // frags info
-}
-
-char *Serialize(IterFileEntry it, char *buf)
-{
-    buf = Put4(it->first.size(), buf);
-    memcpy(buf, it->first.c_str(), it->first.size());
-    buf += it->first.size();
-    buf = Put8(it->second.edate, buf);
-    buf = Put8(it->second.esize, buf);
-    buf = Put8(it->second.eattr, buf);
-    *buf++ = it->second.frags.size();
-    for(size_t i = 0; i < it->second.frags.size(); i++) {
-        buf = Put4(it->second.frags[i].bid, buf);
-        buf = Put8(it->second.frags[i].posblock, buf);
-        buf = Put8(it->second.frags[i].size, buf);
-        buf = Put8(it->second.frags[i].posfile, buf);
-    }
-    return buf;
-}
-
 class CSArc {
     bool isselected(const char* filename);// by files, -only, -not
     void scandir(string filename, bool recurse=true);  // scan dirs to dt
@@ -231,12 +151,15 @@ class CSArc {
 
 
     FileIndex index_;
+    ABIndex abindex_;
     string arcname_;           // archive name
     vector<string> filenames_;     // filename args
     bool recurse_;
 
     int level_;
     uint32_t dict_size_;
+    void compress_index();
+    void decompress_index();
 
 public:
     int Add();                // add, return 1 if error else 0
@@ -323,18 +246,157 @@ int show_progress(void *p, UInt64 insize, UInt64 outsize)
 }
 
 
+bool compareFuncByExt(IterFileEntry a, IterFileEntry b) {
+    int ret = memcmp(a->second.ext, b->second.ext, 4);
+    if (ret != 0)
+        return ret < 0;
+    else 
+        //return a->first < b->first;
+        return a->second.esize < b->second.esize;
+}
+
+void CSArc::compress_index()
+{
+    uint64_t index_size = 0;
+    char *index_buf = PackIndex(index_, abindex_, index_size);
+
+    FileWriter file_writer;
+    MemReader mem_reader;
+    Mutex arc_lock;
+
+    mem_reader.ptr = index_buf;
+    mem_reader.size = index_size;
+    mem_reader.pos = 0;
+    mem_reader.is.Read = mem_read_proc;
+
+    // begin to compress index, and write to end of file
+    init_mutex(arc_lock);
+    ArchiveBlocks ab;
+    uint64_t arc_index_pos = 0;
+    {
+        InputFile f;
+        f.open(arcname_.c_str());
+        f.seek(0, SEEK_END);
+        arc_index_pos = f.tell();
+        f.close();
+
+        ab.filename = arcname_;
+        ab.blocks.clear();
+    }
+
+    file_writer.obj = new AsyncArchiveWriter(ab, 1 * 1048576, arc_lock);
+    file_writer.os.Write = file_write_proc;
+    {
+        CSCProps p;
+        CSCEncProps_Init(&p, 256 * 1024, 2);
+        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
+        uint8_t buf[CSC_PROP_SIZE];
+        CSCEnc_WriteProperties(&p, buf, 0);
+
+        file_writer.obj->Run();
+        file_writer.obj->Write(buf, CSC_PROP_SIZE);
+
+        CSCEnc_Encode(h, (ISeqInStream*)&mem_reader, NULL);
+        CSCEnc_Encode_Flush(h);
+        CSCEnc_Destroy(h);
+        file_writer.obj->Finish();
+        delete file_writer.obj;
+    }
+    destroy_mutex(arc_lock);
+    delete[] index_buf;
+
+    // Write pos of compressed index and its size on header pos
+    {
+        OutputFile f;
+        f.open(arcname_.c_str());
+        f.seek(0, SEEK_END);
+        uint32_t idx_compressed = f.tell() - arc_index_pos;
+        char fs_buf[16];
+        Put8(arc_index_pos, fs_buf);
+        Put4(idx_compressed, fs_buf + 8);
+        Put4(index_size, fs_buf + 12);
+        printf("arc_index_pos, %llu compressed_size %lu\n", arc_index_pos, idx_compressed);
+        f.write(fs_buf, 8, 16);
+        f.close();
+    }
+}
+
+void CSArc::decompress_index()
+{
+    char buf[16];
+    uint64_t index_pos;
+    uint32_t compressed_size;
+    uint32_t raw_size;
+    InputFile f;
+
+    f.open(arcname_.c_str());
+    f.seek(8, SEEK_SET);
+    f.read(buf, 16);
+    char *tmp = buf;
+    tmp = Get8(index_pos, tmp);
+    tmp = Get4(compressed_size, tmp);
+    tmp = Get4(raw_size, tmp);
+    index_.clear();
+    abindex_.clear();
+
+    MemReader reader;
+    reader.is.Read = mem_read_proc;
+    reader.ptr = new char[compressed_size];
+    reader.size = compressed_size;
+    reader.pos = CSC_PROP_SIZE;
+    f.seek(index_pos, SEEK_SET);
+    f.read(reader.ptr, compressed_size);
+    f.close();
+
+    MemWriter writer;
+    writer.os.Write = mem_write_proc;
+    writer.ptr = new char[raw_size];
+    writer.size = raw_size;
+    writer.pos = 0;
+
+    CSCProps p;
+    CSCDec_ReadProperties(&p, (uint8_t*)reader.ptr);
+    CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&reader);
+    CSCDec_Decode(h, (ISeqOutStream*)&writer, NULL);
+    CSCDec_Destroy(h);
+
+    UnpackIndex(index_, abindex_, writer.ptr, raw_size);
+    delete[] reader.ptr;
+    delete[] writer.ptr;
+
+    /*
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++)
+        printf("%s %llu %llu\n", it->first.c_str(), it->second.esize, it->second.edate);
+    printf("==============\n");
+    */
+}
+
 int CSArc::Add()
 {
     vector<FileBlock> filelist;
-    vector<FileBlock> outlist;
 
     for (int i = 0; i < filenames_.size(); ++i) {
         printf("Filenames: %s\n", filenames_[i].c_str());
         scandir(filenames_[i].c_str(), recurse_);
     }
 
+    vector<IterFileEntry> itlist;
     for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
-        printf("%s: %lld\n", it->first.c_str(), it->second.esize);
+        itlist.push_back(it);
+        //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
+        size_t dot = it->first.find_last_of('.');
+        if (dot == string::npos) {
+            memset(it->second.ext, 0, 4);
+        } else {
+            for(size_t i = 0; i < 4 && i + dot + 1 < it->first.size(); i++)
+                it->second.ext[i] = tolower(it->first[i + dot + 1]);
+        }
+    }
+
+    std::sort(itlist.begin(), itlist.end(), compareFuncByExt);
+
+    for(off_t i = 0; i < itlist.size(); i++) {
+        IterFileEntry it = itlist[i];
         FileBlock b;
         b.filename = it->first;
         b.off = 0;
@@ -343,44 +405,166 @@ int CSArc::Add()
     }
 
     {
-        FileBlock b;
-        b.filename = arcname_;
-        b.off = 0;
-        b.posblock = 0;
-        b.size = 0xFFFFFFFFFFFF;
-        outlist.push_back(b);
+        OutputFile f;
+        f.open(arcname_.c_str());
+        f.truncate(24);
+        f.close();
     }
 
-    Reader reader;
-    reader.ar = new AsyncReader(filelist, 32 * 1048576);
-    reader.is.Read = read_proc;
+    FileReader file_reader;
+    file_reader.obj = new AsyncFileReader(filelist, 32 * 1048576);
+    file_reader.is.Read = file_read_proc;
 
-    Writer writer;
-    writer.aw = new AsyncWriter(outlist, 8 * 1048576);
-    writer.os.Write = write_proc;
+    abindex_.insert(make_pair(0, ArchiveBlocks()));
+    Mutex arc_lock;
+    init_mutex(arc_lock);
+    for(IterAB itab = abindex_.begin(); itab != abindex_.end(); itab++) {
 
+    ArchiveBlocks& ab = itab->second;
+    {
+        ab.filename = arcname_;
+        ab.blocks.clear();
+    }
+    FileWriter file_writer;
+    file_writer.obj = new AsyncArchiveWriter(ab, 8 * 1048576, arc_lock);
+    file_writer.os.Write = file_write_proc;
 
-    ICompressProgress prog;
-    prog.Progress = show_progress;
+    {
+        //ICompressProgress prog;
+        //prog.Progress = show_progress;
+        CSCProps p;
+        CSCEncProps_Init(&p, dict_size_, level_);
+        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
+        uint8_t buf[CSC_PROP_SIZE];
+        CSCEnc_WriteProperties(&p, buf, 0);
 
-    CSCProps p;
-    CSCEncProps_Init(&p, 64 * 1048576, 1);
-    CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&writer);
-    CSCEnc_Encode(h, (ISeqInStream*)&reader, &prog);
-    CSCEnc_Encode_Flush(h);
-    CSCEnc_Destroy(h);
+        file_reader.obj->Run();
+        file_writer.obj->Run();
+        file_writer.obj->Write(buf, CSC_PROP_SIZE);
 
-    reader.ar->Finish();
-    writer.aw->Finish();
-    delete writer.aw;
-    delete reader.ar;
-    
+        CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
+        CSCEnc_Encode_Flush(h);
+        CSCEnc_Destroy(h);
+        file_reader.obj->Finish();
+        file_writer.obj->Finish();
+        delete file_writer.obj;
+        delete file_reader.obj;
+    }
+
+    {
+        // update index based on info generated while compression
+        for(off_t i = 0; i < filelist.size(); i++) {
+            FileBlock &b = filelist[i];
+            IterFileEntry it = index_.find(b.filename);
+            assert(it != index_.end());
+            FileEntry::Frag pib;
+            pib.bid = itab->first;
+            pib.posblock = b.posblock;
+            pib.size = b.size;
+            pib.posfile = 0;
+            it->second.frags.push_back(pib);
+        }
+    }
+
+    }
+    destroy_mutex(arc_lock);
+
+    compress_index();
+
+    /*
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++)
+        printf("%s %llu %llu\n", it->first.c_str(), it->second.esize, it->second.edate);
+    printf("==============\n");
+    //index_.clear();
+    abi.insert(make_pair(0, ab));
+    char *index_buf = PackIndex(index_, abi, index_size);
+
+    FileIndex fi2;
+    ABIndex abi2;
+    UnpackIndex(fi2, abi2, index_buf, index_size);
+
+    for(IterFileEntry it = fi2.begin(); it != fi2.end(); it++)
+        printf("%s %llu %llu\n", it->first.c_str(), it->second.esize, it->second.edate);
+    printf("==============\n");
+ 
+
+    uint64_t i2 = 0;
+    char *index_buf2 = PackIndex(fi2, abi2, i2);
+    printf("pack %llu %llu\n", index_size, i2);
+    if (i2 == index_size) {
+        for(uint64_t i = 0; i < i2; i++) {
+            if (index_buf[i] != index_buf2[i]) {
+                printf("Not Match at %llu\n", i);
+                break;
+            }
+        }
+    }
+
+    return 0;
+    */
+
     printf("Arc: %s\n", arcname_.c_str());
     return 0;
 }
 
+bool compareFuncByPosblock(FileBlock a, FileBlock b) {
+    return a.posblock < b.posblock;
+}
+
 int CSArc::Extract()
 {
+    decompress_index();
+    for(IterAB it = abindex_.begin(); it != abindex_.end(); it++) {
+        ArchiveBlocks& ab = it->second;
+        vector<FileBlock> filelist;
+        for(IterFileEntry it2 = index_.begin(); it2 != index_.end(); it2++) {
+            // only one block currently
+            if (it2->second.frags[0].bid == it->first) {
+                FileBlock b;
+                b.filename = "/disk2/tmp/" + it2->first;
+                b.off = it2->second.frags[0].posfile;
+                b.size = it2->second.frags[0].size;
+                b.posblock = it2->second.frags[0].posblock;
+                if (b.size)
+                    filelist.push_back(b);
+
+                makepath(b.filename);
+                if (*b.filename.rbegin() != '/') {
+                    OutputFile f;
+                    f.open(b.filename.c_str());
+                    f.truncate();
+                    f.close();
+                }
+            }
+        }
+
+        std::sort(filelist.begin(), filelist.end(), compareFuncByPosblock);
+
+        FileReader file_reader;
+        file_reader.obj = new AsyncArchiveReader(ab, 8 * 1048576);
+        file_reader.is.Read = file_read_proc;
+
+        FileWriter file_writer;
+        file_writer.obj = new AsyncFileWriter(filelist, 16 * 1048576);
+        file_writer.os.Write = file_write_proc;
+
+        file_reader.obj->Run();
+        file_writer.obj->Run();
+
+        CSCProps p;
+        uint8_t buf[CSC_PROP_SIZE];
+        size_t prop_size = CSC_PROP_SIZE; 
+        file_reader.obj->Read(buf, &prop_size);
+        CSCDec_ReadProperties(&p, buf);
+        CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader);
+        CSCDec_Decode(h, (ISeqOutStream*)&file_writer, NULL);
+        CSCDec_Destroy(h);
+
+        file_reader.obj->Finish();
+        file_writer.obj->Finish();
+        delete file_reader.obj;
+        delete file_writer.obj;
+    }
     return 0;
 }
 

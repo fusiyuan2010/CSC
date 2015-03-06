@@ -297,3 +297,81 @@ public:
 
 #endif
 
+/*
+string output_rename(string name) {
+  if (tofiles.size()==0) return name;  // same name
+  if (files.size()==0) {  // append prefix tofiles[0]
+    int n=name.size();
+    if (n>1 && name[1]==':') {  // remove : from drive letter
+      if (n>2 && name[2]=='/') name=name.substr(0, 1)+name.substr(2), --n;
+      else name[1]='/';
+    }
+    if (n>0 && name[0]!='/') name="/"+name;  // insert / if needed
+    return tofiles[0]+name;
+  }
+  else {  // replace prefix files[i] with tofiles[i]
+    const int n=name.size();
+    for (int i=0; i<size(files) && i<size(tofiles); ++i) {
+      const int fn=files[i].size();
+      if (fn<=n && files[i]==name.substr(0, fn))
+        return tofiles[i]+name.substr(fn);
+    }
+  }
+  return name;
+}
+*/
+
+void makepath(string path, int64_t date=0, int64_t attr=0) {
+    int quiet = 1;
+  for (int i=0; i<path.size(); ++i) {
+    if (path[i]=='\\' || path[i]=='/') {
+      path[i]=0;
+#ifdef unix
+      int ok=!mkdir(path.c_str(), 0777);
+#else
+      int ok=CreateDirectory(utow(path.c_str(), true).c_str(), 0);
+#endif
+      if (ok && quiet<=0) {
+          /*
+        fprintf(con, "Created directory ");
+        printUTF8(path.c_str(), con);
+        fprintf(con, "\n");
+        */
+      }
+      path[i]='/';
+    }
+  }
+
+  // Set date and attributes
+  string filename=path;
+  if (filename!="" && filename[filename.size()-1]=='/')
+    filename=filename.substr(0, filename.size()-1);  // remove trailing slash
+#ifdef unix
+  if (date>0) {
+    struct utimbuf ub;
+    ub.actime=time(NULL);
+    ub.modtime=unix_time(date);
+    utime(filename.c_str(), &ub);
+  }
+  if ((attr&255)=='u')
+    chmod(filename.c_str(), attr>>8);
+#else
+  for (int i=0; i<filename.size(); ++i)  // change to backslashes
+    if (filename[i]=='/') filename[i]='\\';
+  if (date>0) {
+    HANDLE out=CreateFile(utow(filename.c_str(), true).c_str(),
+                          FILE_WRITE_ATTRIBUTES, 0, NULL, OPEN_EXISTING,
+                          FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (out!=INVALID_HANDLE_VALUE) {
+      setDate(out, date);
+      CloseHandle(out);
+    }
+    else winError(filename.c_str());
+  }
+  if ((attr&255)=='w') {
+    SetFileAttributes(utow(filename.c_str(), true).c_str(), attr>>8);
+  }
+#endif
+}
+
+
