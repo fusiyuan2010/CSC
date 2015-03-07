@@ -155,11 +155,14 @@ class CSArc {
     string arcname_;           // archive name
     vector<string> filenames_;     // filename args
     bool recurse_;
+    int mt_count_;
 
     int level_;
     uint32_t dict_size_;
     void compress_index();
     void decompress_index();
+    void compress_mt(vector<CompressionTask> &tasks);
+    void decompress_mt();
 
 public:
     int Add();                // add, return 1 if error else 0
@@ -250,9 +253,18 @@ bool compareFuncByExt(IterFileEntry a, IterFileEntry b) {
     int ret = memcmp(a->second.ext, b->second.ext, 4);
     if (ret != 0)
         return ret < 0;
-    else 
-        //return a->first < b->first;
-        return a->second.esize < b->second.esize;
+    else {
+        // do not sort very small files
+        if (a->second.esize > 64 * 1024 && b->second.esize > 64 * 1024)
+            return a->second.esize < b->second.esize;
+        else {
+            return a->first < b->first;
+        }
+    }
+}
+
+bool compareFuncByTaskSize(CompressionTask a, CompressionTask b) {
+    return a.total_size > b.total_size;
 }
 
 void CSArc::compress_index()
@@ -371,46 +383,67 @@ void CSArc::decompress_index()
     */
 }
 
-int CSArc::Add()
+#include <csa_worker.h>
+void CSArc::compress_mt(vector<CompressionTask> &tasks)
 {
-    vector<FileBlock> filelist;
+    CompressWorker *workers[8];
+    uint32_t workertasks[8];
+    mt_count_ = 2;
 
-    for (int i = 0; i < filenames_.size(); ++i) {
-        printf("Filenames: %s\n", filenames_[i].c_str());
-        scandir(filenames_[i].c_str(), recurse_);
+    Mutex arc_lock;
+    init_mutex(arc_lock);
+    Semaphore sem_workers;
+    sem_workers.init(mt_count_);
+
+    for(int i = 0; i < mt_count_; i++) {
+        workers[i] = new CompressWorker(sem_workers, arc_lock, level_, dict_size_);
+        workers[i]->Run();
+        workertasks[i] = tasks.size();
     }
 
-    vector<IterFileEntry> itlist;
-    for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
-        itlist.push_back(it);
-        //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
-        size_t dot = it->first.find_last_of('.');
-        if (dot == string::npos) {
-            memset(it->second.ext, 0, 4);
-        } else {
-            for(size_t i = 0; i < 4 && i + dot + 1 < it->first.size(); i++)
-                it->second.ext[i] = tolower(it->first[i + dot + 1]);
+    abindex_.clear();
+    std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
+    for(uint32_t i = 0; i < tasks.size(); i++) {
+        sem_workers.wait();
+        for(int j = 0; j < mt_count_; j++) {
+            if (workers[j]->TaskDone()) {
+                // update index based on info generated while compression
+                uint32_t taskid = workertasks[j];
+                if (taskid < tasks.size()) {
+                    vector<FileBlock>& filelist = tasks[taskid].filelist;
+                    for(off_t i = 0; i < filelist.size(); i++) {
+                        FileBlock &b = filelist[i];
+                        IterFileEntry it = index_.find(b.filename);
+                        assert(it != index_.end());
+                        FileEntry::Frag pib;
+                        pib.bid = taskid;
+                        pib.posblock = b.posblock;
+                        pib.size = b.size;
+                        pib.posfile = 0;
+                        it->second.frags.push_back(pib);
+                    }
+                }
+                abindex_.insert(make_pair(i, ArchiveBlocks()));
+                abindex_[i].filename = arcname_;
+                workers[j]->PutTask(tasks[i], abindex_[i]);;
+                workertasks[j] = i;
+                break;
+            }
         }
     }
 
-    std::sort(itlist.begin(), itlist.end(), compareFuncByExt);
+    for(int i = 0; i < mt_count_; i++) {
+        sem_workers.wait();
+    }
+    destroy_mutex(arc_lock);
 
-    for(off_t i = 0; i < itlist.size(); i++) {
-        IterFileEntry it = itlist[i];
-        FileBlock b;
-        b.filename = it->first;
-        b.off = 0;
-        b.size = it->second.esize;
-        filelist.push_back(b);
+    for(int i = 0; i < mt_count_; i++) {
+        workers[i]->Finish();
+        delete workers[i];
     }
 
-    {
-        OutputFile f;
-        f.open(arcname_.c_str());
-        f.truncate(24);
-        f.close();
-    }
-
+    /*
+    vector<FileBlock> filelist;
     FileReader file_reader;
     file_reader.obj = new AsyncFileReader(filelist, 32 * 1048576);
     file_reader.is.Read = file_read_proc;
@@ -451,24 +484,62 @@ int CSArc::Add()
         delete file_reader.obj;
     }
 
-    {
-        // update index based on info generated while compression
-        for(off_t i = 0; i < filelist.size(); i++) {
-            FileBlock &b = filelist[i];
-            IterFileEntry it = index_.find(b.filename);
-            assert(it != index_.end());
-            FileEntry::Frag pib;
-            pib.bid = itab->first;
-            pib.posblock = b.posblock;
-            pib.size = b.size;
-            pib.posfile = 0;
-            it->second.frags.push_back(pib);
-        }
-    }
 
     }
     destroy_mutex(arc_lock);
+    */
+}
 
+void CSArc::decompress_mt()
+{
+}
+
+int CSArc::Add()
+{
+
+    for (int i = 0; i < filenames_.size(); ++i) {
+        printf("Filenames: %s\n", filenames_[i].c_str());
+        scandir(filenames_[i].c_str(), recurse_);
+    }
+
+    vector<IterFileEntry> itlist;
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
+        itlist.push_back(it);
+        //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
+        size_t dot = it->first.find_last_of('.');
+        if (dot == string::npos) {
+            memset(it->second.ext, 0, 4);
+        } else {
+            for(size_t i = 0; i < 4 && i + dot + 1 < it->first.size(); i++)
+                it->second.ext[i] = tolower(it->first[i + dot + 1]);
+        }
+    }
+
+    std::sort(itlist.begin(), itlist.end(), compareFuncByExt);
+
+    vector<CompressionTask> tasks;
+    CompressionTask curtask;
+
+    for(off_t i = 0; i < itlist.size(); i++) {
+        IterFileEntry it = itlist[i];
+        if (i && strncmp(it->second.ext, itlist[i-1]->second.ext, 4)) {
+            if (curtask.total_size)
+                tasks.push_back(curtask);
+            curtask.clear();
+        }
+        curtask.push_back(it->first, 0, it->second.esize);
+    }
+    if (curtask.total_size)
+        tasks.push_back(curtask);
+
+    {
+        OutputFile f;
+        f.open(arcname_.c_str());
+        f.truncate(24);
+        f.close();
+    }
+
+    compress_mt(tasks);
     compress_index();
 
     /*

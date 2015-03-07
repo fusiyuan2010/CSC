@@ -13,6 +13,8 @@ LIBCSCOBJS=$(addprefix libcsc/, csc_analyzer.o csc_encoder_main.o csc_coder.o cs
 
 LIBCSCDECOBJS=$(addprefix libcsc/, csc_dec.o csc_memio.o csc_filters.o)
 
+CSARCOBJS=$(addprefix archiver/, csa_indexpack.o)
+ 
 LIBOUTPUT=libcsc.a
 
 all: $(LIBOUTPUT) test decomp csarc
@@ -23,7 +25,7 @@ test: ./libcsc/test.cpp $(LIBOUTPUT)
 decomp: ./libcsc/decomp.cpp $(LIBCSCDECOBJS)
 	$(CC) $(INCLUDE_PATH) $(CFLAGS) -o $@ $^
 
-csarc: ./archiver/csarc.cpp $(LIBOUTPUT)
+csarc: ./archiver/csarc.cpp $(CSARCOBJS) $(LIBOUTPUT)
 	$(CC) $(INCLUDE_PATH) $(CFLAGS) -o $@ $^ -pthread
 
 $(LIBOUTPUT): $(LIBCSCOBJS)
@@ -33,7 +35,7 @@ $(LIBOUTPUT): $(LIBCSCOBJS)
 	$(CC) $(INCLUDE_PATH) -c $(CFLAGS) -o $@ $^
 
 clean:
-	rm -f libcsc/*.o archiver/*.o $(LIBOUTPUT) test decomp csarc *.a
+	rm -f libcsc/*.o archiver/*.o $(LIBOUTPUT) test decomp csarc
 
 rebuild: clean all
 

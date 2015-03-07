@@ -50,6 +50,27 @@ struct ArchiveBlocks {
 typedef map<uint64_t, ArchiveBlocks> ABIndex;
 typedef ABIndex::iterator IterAB;
 
+struct CompressionTask {
+    uint64_t total_size; 
+    vector<FileBlock> filelist;
+
+    CompressionTask() 
+        : total_size(0) {}
+
+    void push_back(const string& filename, uint64_t off, uint64_t size) {
+        FileBlock b;
+        b.filename = filename;
+        b.off = 0;
+        b.size = size;
+        filelist.push_back(b);
+        total_size += size;
+    }
+
+    void clear() {
+        filelist.clear();
+        total_size = 0;
+    }
+};
 
 #endif
 

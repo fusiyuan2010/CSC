@@ -209,6 +209,7 @@ class AsyncFileReader : public AsyncReader {
             if (!if_.isopen()) {
                 if (curfidx_ >= filelist_.size()) {
                     finished_ = true;
+                    sem_empty_.signal();
                     break;
                 }
                 if (!if_.open(filelist_[curfidx_].filename.c_str())) {
@@ -541,7 +542,7 @@ class AsyncArchiveWriter : public AsyncWriter {
  
 public:
 
-    AsyncArchiveWriter(ArchiveBlocks &ab, uint32_t bufsize, Mutex arc_lock)
+    AsyncArchiveWriter(ArchiveBlocks &ab, uint32_t bufsize, Mutex& arc_lock)
     : ab_(ab),
     arc_lock_(arc_lock)
     {
