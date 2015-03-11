@@ -1,118 +1,11 @@
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
 #define UNICODE  // For Windows
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <time.h>
-#include <stdint.h>
-#include <string>
-#include <vector>
-#include <map>
-#include <algorithm>
-#include <stdexcept>
-#include <fcntl.h>
-#include <assert.h>
-#include <csc_enc.h>
-#include <csc_dec.h>
-
-using namespace std;
-
-#ifdef unix
-#define PTHREAD 1
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <utime.h>
-#include <errno.h>
-
-#ifdef unixtest
-struct termios {
-  int c_lflag;
-};
-#define ECHO 1
-#define ECHONL 2
-#define TCSANOW 4
-int tcgetattr(int, termios*) {return 0;}
-int tcsetattr(int, int, termios*) {return 0;}
-#else
-#include <termios.h>
-#endif
-
-#else  // Assume Windows
-#include <windows.h>
-#include <wincrypt.h>
-#include <io.h>
-#endif
-
-#ifdef _MSC_VER  // Microsoft C++
-#define fseeko(a,b,c) _fseeki64(a,b,c)
-#define ftello(a) _ftelli64(a)
-#else
-#ifndef unix
-#ifndef fseeko
-#define fseeko(a,b,c) fseeko64(a,b,c)
-#endif
-#ifndef ftello
-#define ftello(a) ftello64(a)
-#endif
-#endif
-#endif
-
-// Convert seconds since 0000 1/1/1970 to 64 bit decimal YYYYMMDDHHMMSS
-// Valid from 1970 to 2099.
-int64_t decimal_time(time_t tt) {
-  if (tt==-1) tt=0;
-  int64_t t=(sizeof(tt)==4) ? unsigned(tt) : tt;
-  const int second=t%60;
-  const int minute=t/60%60;
-  const int hour=t/3600%24;
-  t/=86400;  // days since Jan 1 1970
-  const int term=t/1461;  // 4 year terms since 1970
-  t%=1461;
-  t+=(t>=59);  // insert Feb 29 on non leap years
-  t+=(t>=425);
-  t+=(t>=1157);
-  const int year=term*4+t/366+1970;  // actual year
-  t%=366;
-  t+=(t>=60)*2;  // make Feb. 31 days
-  t+=(t>=123);   // insert Apr 31
-  t+=(t>=185);   // insert June 31
-  t+=(t>=278);   // insert Sept 31
-  t+=(t>=340);   // insert Nov 31
-  const int month=t/31+1;
-  const int day=t%31+1;
-  return year*10000000000LL+month*100000000+day*1000000
-         +hour*10000+minute*100+second;
-}
-
-// Convert decimal date to time_t - inverse of decimal_time()
-time_t unix_time(int64_t date) {
-  if (date<=0) return -1;
-  static const int days[12]={0,31,59,90,120,151,181,212,243,273,304,334};
-  const int year=date/10000000000LL%10000;
-  const int month=(date/100000000%100-1)%12;
-  const int day=date/1000000%100;
-  const int hour=date/10000%100;
-  const int min=date/100%100;
-  const int sec=date%100;
-  return (day-1+days[month]+(year%4==0 && month>1)+((year-1970)*1461+1)/4)
-    *86400+hour*3600+min*60+sec;
-}
-
-inline int tolowerW(int c) {
-#ifndef unix
-  if (c>='A' && c<='Z') return c-'A'+'a';
-#endif
-  return c;
-}
-
+#include <csa_common.h>
 #include <csa_typedef.h>
 #include <csa_thread.h>
 #include <csa_file.h>
+#include <csa_worker.h>
 #include <csa_io.h>
 #include <csa_indexpack.h>
 
@@ -161,8 +54,8 @@ class CSArc {
     uint32_t dict_size_;
     void compress_index();
     void decompress_index();
-    void compress_mt(vector<CompressionTask> &tasks);
-    void decompress_mt();
+    void compress_mt(vector<MainTask> &tasks);
+    void decompress_mt(vector<MainTask> &tasks);
 
 public:
     int Add();                // add, return 1 if error else 0
@@ -173,6 +66,29 @@ public:
     int ParseArg(int argc, char *argv[]);
     //====
 };
+
+bool compareFuncByPosblock(FileBlock a, FileBlock b) {
+    return a.posblock < b.posblock;
+}
+
+
+bool compareFuncByExt(IterFileEntry a, IterFileEntry b) {
+    int ret = memcmp(a->second.ext, b->second.ext, 4);
+    if (ret != 0)
+        return ret < 0;
+    else {
+        // do not sort very small files
+        if (a->second.esize > 64 * 1024 && b->second.esize > 64 * 1024)
+            return a->second.esize < b->second.esize;
+        else {
+            return a->first < b->first;
+        }
+    }
+}
+
+bool compareFuncByTaskSize(MainTask a, MainTask b) {
+    return a.total_size > b.total_size;
+}
 
 void CSArc::Usage()
 {
@@ -194,11 +110,11 @@ int ParseOpt(CSCProps *p, char *argv)
 */
 int CSArc::ParseArg(int argc, char *argv[])
 {
-    int i = 0, param_end;
-    CSCProps p;
+    int i = 0;
 
     dict_size_ = 32000000;
     level_ = 2;
+    mt_count_ = 1;
 
     for(; i < argc; i++)
         if (argv[i][0] == '-') {
@@ -218,12 +134,20 @@ int CSArc::ParseArg(int argc, char *argv[])
                     return -1;
             } else if (strncmp(argv[i], "-r", 2) == 0) {
                 recurse_ = true;
+            } else if (strncmp(argv[i], "-t", 2) == 0) {
+                if (argv[i][2])
+                    mt_count_ = argv[i][2] - '0';
+                else
+                    return -1;
             } 
         } else 
             break;
 
     if (i == argc)
         return -1;
+
+    mt_count_ = mt_count_ < 1? 1 : mt_count_;
+    mt_count_ = mt_count_ > 8? 8 : mt_count_;
 
     arcname_ = argv[i];
     i++;
@@ -238,6 +162,7 @@ int CSArc::ParseArg(int argc, char *argv[])
         if (ParseOpt(&p, argv[i]) < 0)
             return -1;
    */
+    return 0;
 }
 
 int show_progress(void *p, UInt64 insize, UInt64 outsize)
@@ -246,25 +171,6 @@ int show_progress(void *p, UInt64 insize, UInt64 outsize)
     printf("\r%llu -> %llu\t\t\t\t", insize, outsize);
     fflush(stdout);
     return 0;
-}
-
-
-bool compareFuncByExt(IterFileEntry a, IterFileEntry b) {
-    int ret = memcmp(a->second.ext, b->second.ext, 4);
-    if (ret != 0)
-        return ret < 0;
-    else {
-        // do not sort very small files
-        if (a->second.esize > 64 * 1024 && b->second.esize > 64 * 1024)
-            return a->second.esize < b->second.esize;
-        else {
-            return a->first < b->first;
-        }
-    }
-}
-
-bool compareFuncByTaskSize(CompressionTask a, CompressionTask b) {
-    return a.total_size > b.total_size;
 }
 
 void CSArc::compress_index()
@@ -383,12 +289,10 @@ void CSArc::decompress_index()
     */
 }
 
-#include <csa_worker.h>
-void CSArc::compress_mt(vector<CompressionTask> &tasks)
+void CSArc::compress_mt(vector<MainTask> &tasks)
 {
-    CompressWorker *workers[8];
+    CompressionWorker *workers[8];
     uint32_t workertasks[8];
-    mt_count_ = 2;
 
     Mutex arc_lock;
     init_mutex(arc_lock);
@@ -396,22 +300,23 @@ void CSArc::compress_mt(vector<CompressionTask> &tasks)
     sem_workers.init(mt_count_);
 
     for(int i = 0; i < mt_count_; i++) {
-        workers[i] = new CompressWorker(sem_workers, arc_lock, level_, dict_size_);
+        workers[i] = new CompressionWorker(sem_workers, arc_lock, level_, dict_size_);
         workers[i]->Run();
         workertasks[i] = tasks.size();
     }
 
     abindex_.clear();
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
-    for(uint32_t i = 0; i < tasks.size(); i++) {
+    for(uint32_t i = 0; i < tasks.size() + mt_count_; i++) {
         sem_workers.wait();
         for(int j = 0; j < mt_count_; j++) {
+            // check which one is finished
             if (workers[j]->TaskDone()) {
                 // update index based on info generated while compression
                 uint32_t taskid = workertasks[j];
                 if (taskid < tasks.size()) {
                     vector<FileBlock>& filelist = tasks[taskid].filelist;
-                    for(off_t i = 0; i < filelist.size(); i++) {
+                    for(size_t i = 0; i < filelist.size(); i++) {
                         FileBlock &b = filelist[i];
                         IterFileEntry it = index_.find(b.filename);
                         assert(it != index_.end());
@@ -420,12 +325,57 @@ void CSArc::compress_mt(vector<CompressionTask> &tasks)
                         pib.posblock = b.posblock;
                         pib.size = b.size;
                         pib.posfile = 0;
+                        if (it->second.frags.size() > 0)
+                            printf("asdf");
                         it->second.frags.push_back(pib);
                     }
                 }
-                abindex_.insert(make_pair(i, ArchiveBlocks()));
-                abindex_[i].filename = arcname_;
-                workers[j]->PutTask(tasks[i], abindex_[i]);;
+                // mark it as a invalid value
+                workertasks[j] = tasks.size();
+
+                if (i < tasks.size()) {
+                    // keep adding remind tasks
+                    // task id is always equal to archive id 
+                    abindex_.insert(make_pair(i, ArchiveBlocks()));
+                    abindex_[i].filename = arcname_;
+                    workers[j]->PutTask(tasks[i], abindex_[i]);;
+                    workertasks[j] = i;
+                }
+                break;
+            }
+        }
+    }
+
+    destroy_mutex(arc_lock);
+
+    for(int i = 0; i < mt_count_; i++) {
+        workers[i]->Finish();
+        delete workers[i];
+    }
+}
+
+void CSArc::decompress_mt(vector<MainTask> &tasks)
+{
+    DecompressionWorker *workers[8];
+    uint32_t workertasks[8];
+
+    Semaphore sem_workers;
+    sem_workers.init(mt_count_);
+
+    for(int i = 0; i < mt_count_; i++) {
+        workers[i] = new DecompressionWorker(sem_workers);
+        workers[i]->Run();
+        workertasks[i] = tasks.size();
+    }
+
+    std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
+    for(uint32_t i = 0; i < tasks.size(); i++) {
+        sem_workers.wait();
+        for(int j = 0; j < mt_count_; j++) {
+            if (workers[j]->TaskDone()) {
+                std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
+                abindex_[tasks[i].ab_id].filename = arcname_;
+                workers[j]->PutTask(tasks[i], abindex_[tasks[i].ab_id]);;
                 workertasks[j] = i;
                 break;
             }
@@ -435,69 +385,16 @@ void CSArc::compress_mt(vector<CompressionTask> &tasks)
     for(int i = 0; i < mt_count_; i++) {
         sem_workers.wait();
     }
-    destroy_mutex(arc_lock);
 
     for(int i = 0; i < mt_count_; i++) {
         workers[i]->Finish();
         delete workers[i];
     }
-
-    /*
-    vector<FileBlock> filelist;
-    FileReader file_reader;
-    file_reader.obj = new AsyncFileReader(filelist, 32 * 1048576);
-    file_reader.is.Read = file_read_proc;
-
-    abindex_.insert(make_pair(0, ArchiveBlocks()));
-    Mutex arc_lock;
-    init_mutex(arc_lock);
-    for(IterAB itab = abindex_.begin(); itab != abindex_.end(); itab++) {
-
-    ArchiveBlocks& ab = itab->second;
-    {
-        ab.filename = arcname_;
-        ab.blocks.clear();
-    }
-    FileWriter file_writer;
-    file_writer.obj = new AsyncArchiveWriter(ab, 8 * 1048576, arc_lock);
-    file_writer.os.Write = file_write_proc;
-
-    {
-        //ICompressProgress prog;
-        //prog.Progress = show_progress;
-        CSCProps p;
-        CSCEncProps_Init(&p, dict_size_, level_);
-        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
-        uint8_t buf[CSC_PROP_SIZE];
-        CSCEnc_WriteProperties(&p, buf, 0);
-
-        file_reader.obj->Run();
-        file_writer.obj->Run();
-        file_writer.obj->Write(buf, CSC_PROP_SIZE);
-
-        CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
-        CSCEnc_Encode_Flush(h);
-        CSCEnc_Destroy(h);
-        file_reader.obj->Finish();
-        file_writer.obj->Finish();
-        delete file_writer.obj;
-        delete file_reader.obj;
-    }
-
-
-    }
-    destroy_mutex(arc_lock);
-    */
-}
-
-void CSArc::decompress_mt()
-{
 }
 
 int CSArc::Add()
 {
-
-    for (int i = 0; i < filenames_.size(); ++i) {
+    for (size_t i = 0; i < filenames_.size(); ++i) {
         printf("Filenames: %s\n", filenames_[i].c_str());
         scandir(filenames_[i].c_str(), recurse_);
     }
@@ -517,17 +414,17 @@ int CSArc::Add()
 
     std::sort(itlist.begin(), itlist.end(), compareFuncByExt);
 
-    vector<CompressionTask> tasks;
-    CompressionTask curtask;
+    vector<MainTask> tasks;
+    MainTask curtask;
 
-    for(off_t i = 0; i < itlist.size(); i++) {
+    for(size_t i = 0; i < itlist.size(); i++) {
         IterFileEntry it = itlist[i];
         if (i && strncmp(it->second.ext, itlist[i-1]->second.ext, 4)) {
             if (curtask.total_size)
                 tasks.push_back(curtask);
             curtask.clear();
         }
-        curtask.push_back(it->first, 0, it->second.esize);
+        curtask.push_back(it->first, 0, it->second.esize, 0);
     }
     if (curtask.total_size)
         tasks.push_back(curtask);
@@ -578,69 +475,51 @@ int CSArc::Add()
     return 0;
 }
 
-bool compareFuncByPosblock(FileBlock a, FileBlock b) {
-    return a.posblock < b.posblock;
-}
-
 int CSArc::Extract()
 {
+    string to_dir = "/disk2/tmp/";
     decompress_index();
-    for(IterAB it = abindex_.begin(); it != abindex_.end(); it++) {
-        ArchiveBlocks& ab = it->second;
-        vector<FileBlock> filelist;
-        for(IterFileEntry it2 = index_.begin(); it2 != index_.end(); it2++) {
-            // only one block currently
-            if (it2->second.frags[0].bid == it->first) {
-                FileBlock b;
-                b.filename = "/disk2/tmp/" + it2->first;
-                b.off = it2->second.frags[0].posfile;
-                b.size = it2->second.frags[0].size;
-                b.posblock = it2->second.frags[0].posblock;
-                if (b.size)
-                    filelist.push_back(b);
+    vector<MainTask> tasks;
+    map<uint64_t, size_t> idmap;
 
-                makepath(b.filename);
-                if (*b.filename.rbegin() != '/') {
-                    OutputFile f;
-                    f.open(b.filename.c_str());
-                    f.truncate();
-                    f.close();
-                }
-            }
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
+        //printf("%s -> blocks: %d\n", it->first.c_str(), it->second.frags.size());
+        if (filenames_.size() && !isselected(it->first.c_str()))
+            continue;
+        string new_filename = to_dir + it->first;
+        for(size_t fi = 0; fi < it->second.frags.size(); fi++) {
+            MainTask *task = NULL;
+            if (idmap.count(it->second.frags[fi].bid) == 0) {
+                idmap[it->second.frags[fi].bid] = tasks.size();
+                tasks.push_back(MainTask());
+                task = &tasks[idmap[it->second.frags[fi].bid]];
+                task->ab_id = it->second.frags[fi].bid;
+            } else 
+                task = &tasks[idmap[it->second.frags[fi].bid]];
+            FileEntry::Frag& ff = it->second.frags[fi];
+            if (ff.size)
+                task->push_back(new_filename, ff.posfile, ff.size, ff.posblock, it);
         }
-
-        std::sort(filelist.begin(), filelist.end(), compareFuncByPosblock);
-
-        FileReader file_reader;
-        file_reader.obj = new AsyncArchiveReader(ab, 8 * 1048576);
-        file_reader.is.Read = file_read_proc;
-
-        FileWriter file_writer;
-        file_writer.obj = new AsyncFileWriter(filelist, 16 * 1048576);
-        file_writer.os.Write = file_write_proc;
-
-        file_reader.obj->Run();
-        file_writer.obj->Run();
-
-        CSCProps p;
-        uint8_t buf[CSC_PROP_SIZE];
-        size_t prop_size = CSC_PROP_SIZE; 
-        file_reader.obj->Read(buf, &prop_size);
-        CSCDec_ReadProperties(&p, buf);
-        CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader);
-        CSCDec_Decode(h, (ISeqOutStream*)&file_writer, NULL);
-        CSCDec_Destroy(h);
-
-        file_reader.obj->Finish();
-        file_writer.obj->Finish();
-        delete file_reader.obj;
-        delete file_writer.obj;
+        makepath(new_filename, it->second.edate, it->second.eattr);
+        if (*new_filename.rbegin() != '/') {
+            OutputFile f;
+            f.open(new_filename.c_str());
+            f.truncate();
+            f.close(it->second.edate, it->second.eattr);
+        }
     }
+    decompress_mt(tasks);
     return 0;
 }
 
 int CSArc::List()
 {
+    decompress_index();
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
+        if (filenames_.size() && !isselected(it->first.c_str()))
+            continue;
+        printf("%s %llu\n", it->first.c_str(), it->second.esize);
+    }
     return 0;
 }
 
@@ -758,7 +637,7 @@ bool CSArc::isselected(const char* filename) {
   bool matched=true;
   if (filenames_.size()>0) {
     matched=false;
-    for (int i=0; i < filenames_.size() && !matched; ++i)
+    for (size_t i=0; i < filenames_.size() && !matched; ++i)
       if (ispath(filenames_[i].c_str(), filename))
         matched=true;
   }

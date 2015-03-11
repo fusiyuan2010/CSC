@@ -1,6 +1,7 @@
 #ifndef _CSA_IO_
 #define _CSA_IO_
 
+#include <csa_file.h>
 #include <csa_typedef.h>
 #include <csa_thread.h>
 #include <deque>
@@ -45,7 +46,6 @@ public:
     }
 
     virtual ~AsyncReader() {
-        join(iothread_);
         destroy_mutex(lock_);
         sem_full_.destroy();
         sem_empty_.destroy();
@@ -122,8 +122,13 @@ protected:
     virtual void *run() = 0;
 
     void flush() {
-        queue_.push_back(curblock_);
-        size_ += curblock_.size;
+        if (curblock_.size > 0) {
+            queue_.push_back(curblock_);
+            size_ += curblock_.size;
+        } else {
+            delete []curblock_.buf;
+        }
+        curblock_.buf = NULL;
         curblock_.size = 0;
     }
 
@@ -144,6 +149,7 @@ public:
     }
 
     virtual ~AsyncWriter() {
+        delete[] curblock_.buf;
         destroy_mutex(lock_);
         sem_full_.destroy();
         sem_empty_.destroy();
@@ -164,11 +170,7 @@ public:
             }
 
             if (curblock_.size + size > cap_) {
-                if (curblock_.size > 0) {
-                    flush();
-                } else {
-                    delete[] curblock_.buf;
-                }
+                flush();
                 cap_ = std::max<uint32_t>(1048576, size);
                 curblock_.buf = new char[cap_];
             }
@@ -189,7 +191,7 @@ public:
 class AsyncFileReader : public AsyncReader {
 
     vector<FileBlock> &filelist_;
-    off_t curfidx_;
+    size_t curfidx_;
     size_t curfprog_;
     uint64_t cumsize_;
     InputFile if_;
@@ -218,7 +220,7 @@ class AsyncFileReader : public AsyncReader {
                     continue;
                 }
 
-                printf("%s: %lld\n", filelist_[curfidx_].filename.c_str(), filelist_[curfidx_].size);
+                //printf("%s: %lld\n", filelist_[curfidx_].filename.c_str(), filelist_[curfidx_].size);
                 filelist_[curfidx_].posblock = cumsize_;
                 if_.seek(filelist_[curfidx_].off, SEEK_SET);
             }
@@ -264,9 +266,8 @@ public:
     }
 
     ~AsyncFileReader() {
+        join(iothread_);
     }
-
-
 };
 
 class AsyncFileWriter : public AsyncWriter {
@@ -275,12 +276,18 @@ class AsyncFileWriter : public AsyncWriter {
     uint64_t curfprog_;
     uint64_t curbprog_;
     uint64_t cumsize_;
+    bool done_;
  
     OutputFile of_;
 
     void *run() {
         while(1) {
             lock(lock_);
+            if (done_) {
+                release(lock_);
+                break;
+            }
+
             if (size_ == 0) {
                 if (finished_) {
                     release(lock_);
@@ -294,16 +301,18 @@ class AsyncFileWriter : public AsyncWriter {
             Block& b = queue_.front();
             if (cumsize_ + b.size > filelist_[curfidx_].posblock) {
                 if (!of_.isopen()) {
-                    printf("Opening %s\n", filelist_[curfidx_].filename.c_str());
+                    //printf("Opening %s\n", filelist_[curfidx_].filename.c_str());
+                    if (filelist_[curfidx_].filename == "/disk2/tmp//disk2/D/cr/app1/check_soundcard.vbs")
+                        printf("sb");
                     if (!of_.open(filelist_[curfidx_].filename.c_str())) {
                         curfidx_++;
                         if (curfidx_ >= filelist_.size()) {
-                            finished_ = true;
+                            done_ = true;
                             sem_full_.signal();
                         }
+                        release(lock_);
                         continue;
                     }
-                    //of_.truncate(0);
                     curfprog_ = 0;
                     of_.seek(filelist_[curfidx_].off, SEEK_SET);
                 }
@@ -313,17 +322,17 @@ class AsyncFileWriter : public AsyncWriter {
                 curfprog_ += wrsize;
                 curbprog_ += wrsize;
                 if (curfprog_ ==  filelist_[curfidx_].size) {
-                    of_.close();
+                    of_.close(filelist_[curfidx_].it->second.edate,
+                        filelist_[curfidx_].it->second.eattr);
                     curfidx_++;
                     if (curfidx_ >= filelist_.size()) {
-                        finished_ = true;
+                        done_ = true;
                         sem_full_.signal();
                     }
                 }
             } else {
                 curbprog_ = b.size;
             }
-
 
             if (curbprog_ == b.size) {
                 delete[] b.buf;
@@ -347,7 +356,8 @@ public:
     curfidx_(0),
     curfprog_(0),
     curbprog_(0),
-    cumsize_(0)
+    cumsize_(0),
+    done_(false)
     {
         size_ = 0,
         bufsize_ = bufsize;
@@ -365,7 +375,8 @@ public:
         join(iothread_);
         if (of_.isopen()) {
             filelist_[curfidx_].size = curfprog_;
-            of_.close();
+            of_.close(filelist_[curfidx_].it->second.edate,
+                    filelist_[curfidx_].it->second.eattr);
         }
     }
 };
@@ -376,7 +387,7 @@ struct FileWriter {
     AsyncWriter *obj;
 };
 
-size_t file_write_proc(void *p, const void *buf, size_t size) 
+inline size_t file_write_proc(void *p, const void *buf, size_t size) 
 {
     FileWriter *w = (FileWriter *)p;
     return w->obj->Write(buf, size);
@@ -387,7 +398,7 @@ struct FileReader {
     AsyncReader *obj;
 };
 
-int file_read_proc(void *p, void *buf, size_t *size)
+inline int file_read_proc(void *p, void *buf, size_t *size)
 {
     FileReader *r = (FileReader *)p;
     return r->obj->Read(buf, size);
@@ -400,7 +411,7 @@ struct MemReader {
     uint64_t pos;
 };
 
-int mem_read_proc(void *p, void *buf, size_t *size)
+inline int mem_read_proc(void *p, void *buf, size_t *size)
 {
     MemReader *r = (MemReader*)p;
     uint64_t s = std::min(*size, r->size - r->pos);
@@ -417,7 +428,7 @@ struct MemWriter {
     uint64_t pos;
 };
 
-size_t mem_write_proc(void *p, const void *buf, size_t size) 
+inline size_t mem_write_proc(void *p, const void *buf, size_t size) 
 {
     MemWriter *r = (MemWriter*)p;
     uint64_t s = std::min(size, r->size - r->pos);
@@ -433,7 +444,7 @@ class AsyncArchiveWriter;
 
 class AsyncArchiveReader : public AsyncReader {
     ArchiveBlocks &ab_;
-    off_t curbidx_;
+    size_t curbidx_;
     size_t curbprog_;
     InputFile if_;
 

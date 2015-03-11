@@ -1,6 +1,22 @@
 #ifndef _CSA_FILE_H_
 #define _CSA_FILE_H_
+#include <csa_common.h>
 // File types accepting UTF-8 filenames
+
+#ifdef _MSC_VER  // Microsoft C++
+#define fseeko(a,b,c) _fseeki64(a,b,c)
+#define ftello(a) _ftelli64(a)
+#else
+#ifndef unix
+#ifndef fseeko
+#define fseeko(a,b,c) fseeko64(a,b,c)
+#endif
+#ifndef ftello
+#define ftello(a) ftello64(a)
+#endif
+#endif
+#endif
+
 #ifdef unix
 
 class InputFile {
@@ -114,7 +130,7 @@ public:
 
 #else  // Windows
 
-class InputFile: public File, public libzpaq::Reader {
+class InputFile {
   HANDLE in;  // input file handle
   DWORD n;    // buffer size
 public:
@@ -184,7 +200,7 @@ public:
   ~InputFile() {close();}
 };
 
-class OutputFile: public File, public libzpaq::Writer {
+class OutputFile {
   HANDLE out;               // output file handle
   std::wstring filename;    // filename as wide string
 public:
@@ -295,8 +311,6 @@ public:
 
 #endif
 
-#endif
-
 /*
 string output_rename(string name) {
   if (tofiles.size()==0) return name;  // same name
@@ -321,57 +335,9 @@ string output_rename(string name) {
 }
 */
 
-void makepath(string path, int64_t date=0, int64_t attr=0) {
-    int quiet = 1;
-  for (int i=0; i<path.size(); ++i) {
-    if (path[i]=='\\' || path[i]=='/') {
-      path[i]=0;
-#ifdef unix
-      int ok=!mkdir(path.c_str(), 0777);
-#else
-      int ok=CreateDirectory(utow(path.c_str(), true).c_str(), 0);
-#endif
-      if (ok && quiet<=0) {
-          /*
-        fprintf(con, "Created directory ");
-        printUTF8(path.c_str(), con);
-        fprintf(con, "\n");
-        */
-      }
-      path[i]='/';
-    }
-  }
 
-  // Set date and attributes
-  string filename=path;
-  if (filename!="" && filename[filename.size()-1]=='/')
-    filename=filename.substr(0, filename.size()-1);  // remove trailing slash
-#ifdef unix
-  if (date>0) {
-    struct utimbuf ub;
-    ub.actime=time(NULL);
-    ub.modtime=unix_time(date);
-    utime(filename.c_str(), &ub);
-  }
-  if ((attr&255)=='u')
-    chmod(filename.c_str(), attr>>8);
-#else
-  for (int i=0; i<filename.size(); ++i)  // change to backslashes
-    if (filename[i]=='/') filename[i]='\\';
-  if (date>0) {
-    HANDLE out=CreateFile(utow(filename.c_str(), true).c_str(),
-                          FILE_WRITE_ATTRIBUTES, 0, NULL, OPEN_EXISTING,
-                          FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (out!=INVALID_HANDLE_VALUE) {
-      setDate(out, date);
-      CloseHandle(out);
-    }
-    else winError(filename.c_str());
-  }
-  if ((attr&255)=='w') {
-    SetFileAttributes(utow(filename.c_str(), true).c_str(), attr>>8);
-  }
+void makepath(string path, int64_t date=0, int64_t attr=0);
+
 #endif
-}
 
 

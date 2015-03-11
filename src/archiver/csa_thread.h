@@ -1,35 +1,36 @@
 #ifndef _CSA_THREAD_H_
 #define _CSA_THREAD_H_
+#include <csa_common.h>
 
 #ifdef PTHREAD
 #include <pthread.h>
 typedef void* ThreadReturn;                                // job return type
 typedef pthread_t ThreadID;                                // job ID type
-void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg)// start job
+inline void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg)// start job
   {pthread_create(&tid, NULL, f, arg);}
-void join(ThreadID tid) {pthread_join(tid, NULL);}         // wait for job
+inline void join(ThreadID tid) {pthread_join(tid, NULL);}         // wait for job
 typedef pthread_mutex_t Mutex;                             // mutex type
-void init_mutex(Mutex& m) {pthread_mutex_init(&m, 0);}     // init mutex
-void lock(Mutex& m) {pthread_mutex_lock(&m);}              // wait for mutex
-void release(Mutex& m) {pthread_mutex_unlock(&m);}         // release mutex
-void destroy_mutex(Mutex& m) {pthread_mutex_destroy(&m);}  // destroy mutex
+inline void init_mutex(Mutex& m) {pthread_mutex_init(&m, 0);}     // init mutex
+inline void lock(Mutex& m) {pthread_mutex_lock(&m);}              // wait for mutex
+inline void release(Mutex& m) {pthread_mutex_unlock(&m);}         // release mutex
+inline void destroy_mutex(Mutex& m) {pthread_mutex_destroy(&m);}  // destroy mutex
 
 class Semaphore {
 public:
   Semaphore() {sem=-1;}
-  void init(int n) {
+  inline void init(int n) {
     assert(n>=0);
     assert(sem==-1);
     pthread_cond_init(&cv, 0);
     pthread_mutex_init(&mutex, 0);
     sem=n;
   }
-  void destroy() {
+  inline void destroy() {
     assert(sem>=0);
     pthread_mutex_destroy(&mutex);
     pthread_cond_destroy(&cv);
   }
-  int wait() {
+  inline int wait() {
     assert(sem>=0);
     pthread_mutex_lock(&mutex);
     int r=0;
@@ -39,7 +40,7 @@ public:
     pthread_mutex_unlock(&mutex);
     return r;
   }
-  void signal() {
+  inline void signal() {
     assert(sem>=0);
     pthread_mutex_lock(&mutex);
     ++sem;
@@ -79,67 +80,6 @@ private:
 };
 
 #endif
-
-/*
-class Task {
-public:
-    virtual void Run() = 0;
-};
-
-class ThreadWorker {
-    ThreadID me;
-    Task *task_;
-    Semaphore sm_;
-
-    static ThreadReturn entrance(void *arg) {
-        ThreadWorker *tw = (ThreadWorker *)arg;
-        tw->run();
-    }
-
-    void run() {
-        while(1) {
-            if (!task_)
-                return;
-            sm_.wait();
-            task_->Run();
-            task_ = NULL;
-        }
-    }
-
-public:
-    ThreadWorker() {
-        sm_.init(0);
-        task_ = NULL;
-        run(me, ThreadWorker::entrance, this);
-    }
-
-    void AssignTask(Task *task)
-    {
-        task_ = task;
-        sm_.signal();
-    }
-
-    bool IsBusy() {
-        return task_ != NULL;
-    }
-};
-
-class ThreadFactory {
-    Semaphore sem_;
-    Mutex m_;
-    vector<ThreadWorker*> workers_;
-public:
-    void Init(int thread_num) {
-        for(int i = 0; i < thread_num; i++) {
-            
-        }
-    }
-
-    ThreadWorker *graspWorker();
-    void releaseWorker();
-};
-*/
-
 
 #endif
 

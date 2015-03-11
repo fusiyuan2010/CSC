@@ -34,6 +34,8 @@ struct FileBlock {
     uint64_t off;
     uint64_t size;
     uint64_t posblock;
+    // used only when decompression
+    IterFileEntry it;
 };
 
 
@@ -50,18 +52,22 @@ struct ArchiveBlocks {
 typedef map<uint64_t, ArchiveBlocks> ABIndex;
 typedef ABIndex::iterator IterAB;
 
-struct CompressionTask {
+struct MainTask {
     uint64_t total_size; 
     vector<FileBlock> filelist;
+    uint32_t ab_id;
 
-    CompressionTask() 
+    MainTask() 
         : total_size(0) {}
 
-    void push_back(const string& filename, uint64_t off, uint64_t size) {
+    void push_back(const string& filename, uint64_t off, uint64_t size, uint64_t posblock, 
+            IterFileEntry it = IterFileEntry()) {
         FileBlock b;
         b.filename = filename;
         b.off = 0;
         b.size = size;
+        b.posblock = posblock;
+        b.it = it;
         filelist.push_back(b);
         total_size += size;
     }
@@ -71,6 +77,8 @@ struct CompressionTask {
         total_size = 0;
     }
 };
+
+
 
 #endif
 

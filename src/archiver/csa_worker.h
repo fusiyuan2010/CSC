@@ -1,57 +1,29 @@
 #ifndef _CSA_WORKER_H_
 #define _CSA_WORKER_H_
-
+#include <csa_common.h>
 #include <csa_typedef.h>
 #include <csa_thread.h>
 #include <csa_io.h>
 
-class CompressWorker {
+class MainWorker {
+protected:
     ThreadID thread_;
     Semaphore& sem_finish_;
-    Mutex& arc_lock_;
     Semaphore got_task_;
-    int level_;
-    uint32_t dict_size_;
-    CompressionTask *task_;
+
+    MainTask *task_;
     ArchiveBlocks* abs_;
+
+private:
     bool finished_;
 
     static ThreadReturn entrance(void *arg) 
     {
-        CompressWorker *worker = (CompressWorker *)arg; 
+        MainWorker *worker = (MainWorker *)arg; 
         return worker->run();
     }
 
-    void do_compression() {
-        FileReader file_reader;
-        file_reader.obj = new AsyncFileReader(task_->filelist, 
-                std::min<uint32_t>(32 * 1048576, task_->total_size));
-        file_reader.is.Read = file_read_proc;
-
-        FileWriter file_writer;
-        file_writer.obj = new AsyncArchiveWriter(*abs_, 8 * 1048576, arc_lock_);
-        file_writer.os.Write = file_write_proc;
-
-        //ICompressProgress prog;
-        //prog.Progress = show_progress;
-        CSCProps p;
-        CSCEncProps_Init(&p, std::min<uint32_t>(dict_size_, task_->total_size), level_);
-        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
-        uint8_t buf[CSC_PROP_SIZE];
-        CSCEnc_WriteProperties(&p, buf, 0);
-
-        file_reader.obj->Run();
-        file_writer.obj->Run();
-        file_writer.obj->Write(buf, CSC_PROP_SIZE);
-
-        CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
-        CSCEnc_Encode_Flush(h);
-        CSCEnc_Destroy(h);
-        file_reader.obj->Finish();
-        file_writer.obj->Finish();
-        delete file_writer.obj;
-        delete file_reader.obj;
-    }
+    virtual void do_work() = 0; 
 
     void *run() {
         while(1) {
@@ -59,7 +31,7 @@ class CompressWorker {
             if (finished_)
                 break;
 
-            do_compression();
+            do_work();
 
             task_ = NULL;
             sem_finish_.signal();
@@ -68,21 +40,20 @@ class CompressWorker {
     }
 
 public:
-    CompressWorker(Semaphore &sem, Mutex& arc_lock, int level, int dict_size) :
+    MainWorker(Semaphore &sem) :
         sem_finish_(sem),
-        arc_lock_(arc_lock),
-        level_(level),
-        dict_size_(dict_size),
         task_(NULL),
         finished_(false) {
             got_task_.init(0);
         }
 
+    virtual ~MainWorker() {}
+
     void Run() {
-        ::run(thread_, CompressWorker::entrance, this);
+        ::run(thread_, MainWorker::entrance, this);
     }
 
-    void PutTask(CompressionTask& task, ArchiveBlocks& abs) {
+    void PutTask(MainTask& task, ArchiveBlocks& abs) {
         task_ = &task;
         abs_ = &abs;
         got_task_.signal();
@@ -98,6 +69,32 @@ public:
         ::join(thread_);
     }
 };
+
+class CompressionWorker: public MainWorker {
+    int level_;
+    uint32_t dict_size_;
+    Mutex& arc_lock_;
+    void do_work();
+public:
+    CompressionWorker(Semaphore &sem, Mutex& arc_lock, int level, int dict_size) :
+        MainWorker(sem),
+        level_(level),
+        dict_size_(dict_size),
+        arc_lock_(arc_lock)
+    {
+    }
+
+};
+
+class DecompressionWorker: public MainWorker {
+    void do_work();
+public:
+    DecompressionWorker(Semaphore &sem) :
+        MainWorker(sem)
+    {}
+};
+
+
 
 #endif
 

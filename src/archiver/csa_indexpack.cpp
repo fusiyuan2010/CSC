@@ -126,9 +126,9 @@ static char *ArchiveBlocksToBuf(IterAB it, char *buf)
 {
     buf = Put8(it->first, buf);
     ArchiveBlocks &abs = it->second;
-    buf = Put4(abs.filename.size(), buf);
-    memcpy(buf, abs.filename.c_str(), abs.filename.size());
-    buf += abs.filename.size();
+    //buf = Put4(abs.filename.size(), buf);
+    //memcpy(buf, abs.filename.c_str(), abs.filename.size());
+    //buf += abs.filename.size();
     buf = Put4(abs.blocks.size(), buf);
     for(size_t i = 0; i < abs.blocks.size(); i++) {
         buf = Put8(abs.blocks[i].off, buf);
@@ -141,9 +141,9 @@ static char *BufToArchiveBlocks(uint64_t& id, ArchiveBlocks& abs, char *buf)
 {
     buf = Get8(id, buf);
     uint32_t u4;
-    buf = Get4(u4, buf);
-    abs.filename.assign(buf, u4);
-    buf += u4;
+    //buf = Get4(u4, buf);
+    //abs.filename.assign(buf, u4);
+    //buf += u4;
     buf = Get4(u4, buf);
     abs.blocks.clear();
     for(uint32_t i = 0; i < u4; i++) {
