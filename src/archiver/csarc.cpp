@@ -41,6 +41,7 @@ class CSArc {
     void scandir(string filename, bool recurse=true);  // scan dirs to dt
     void addfile(string filename, int64_t edate, int64_t esize,
                int64_t eattr);          // add external file to dt
+    int check_header();
 
 
     FileIndex index_;
@@ -49,6 +50,8 @@ class CSArc {
     vector<string> filenames_;     // filename args
     bool recurse_;
     int mt_count_;
+    int split_count_;
+    string to_dir_;
 
     int level_;
     uint32_t dict_size_;
@@ -92,22 +95,37 @@ bool compareFuncByTaskSize(MainTask a, MainTask b) {
 
 void CSArc::Usage()
 {
-    fprintf(stderr, "Usage of CSArc\n");
+    fprintf(stderr, "Usage of CSArc:\n");
+    fprintf(stderr, "Create a new archive:\n");
+    fprintf(stderr, "\tcsarc a [options] archive_name file2 file2 ...\n");
+    fprintf(stderr, "\t      [options] can be:\n");
+    fprintf(stderr, "\t         -m[1..5]   Compression level from most efficient to strongest\n");
+    fprintf(stderr, "\t         -d##[k|m]  Dictionary size, must be range in [32KB, 1GB]\n");
+    fprintf(stderr, "\t         -r         Recursively adding files in directories\n");
+    fprintf(stderr, "\t         -p##       Only works with single file compression, split\n");
+    fprintf(stderr, "\t         -t#        Multithreading-number, range in [1,8]\n");
+    fprintf(stderr, "\t                    Memory usage will be multiplied by this number\n");
+    fprintf(stderr, "\t\n");
+    fprintf(stderr, "Extract file(s) from archive:\n");
+    fprintf(stderr, "\tcsarc x [options] archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\t      [options] can be:\n");
+    fprintf(stderr, "\t         -t#        Multithreading-number, range in [1,8]\n");
+    fprintf(stderr, "\t                    Memory usage will be multiplied by this number\n");
+    fprintf(stderr, "\t         -o out_dir Extraction output directory\n");
+    fprintf(stderr, "\t\n");
+    fprintf(stderr, "List file(s) in archive:\n");
+    fprintf(stderr, "\tcsarc l archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\t\n");
+    fprintf(stderr, "Test to extract file(s) in archive:\n");
+    fprintf(stderr, "\tcsarc t [options] archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\t         -t#        Multithreading-number, range in [1,8]\n");
+    fprintf(stderr, "Example:\n");
+    fprintf(stderr, "\tcsarc a -m2 -d64m -r -t2 out.csa /disk2/*\n");
+    fprintf(stderr, "\tcsarc x -t2 -o /tmp/ out.csa *.jpg\n");
+    fprintf(stderr, "\tcsarc l out.csa\n");
+    fprintf(stderr, "\tcsarc t out.csa *.dll\n");
 }
 
-/*
-int ParseOpt(CSCProps *p, char *argv)
-{        
-    if (strncmp(argv, "-fdelta0", 8) == 0)
-        p->DLTFilter = 0;
-    else if (strncmp(argv, "-fexe0", 6) == 0)
-        p->EXEFilter = 0;
-    else if (strncmp(argv, "-ftxt0", 6) == 0)
-        p->TXTFilter = 0;
-    return 0;
-}
-
-*/
 int CSArc::ParseArg(int argc, char *argv[])
 {
     int i = 0;
@@ -115,14 +133,18 @@ int CSArc::ParseArg(int argc, char *argv[])
     dict_size_ = 32000000;
     level_ = 2;
     mt_count_ = 1;
+    split_count_ = 1;
 
+    to_dir_ = "./";
     for(; i < argc; i++)
         if (argv[i][0] == '-') {
             if (strncmp(argv[i], "-m", 2) == 0) {
                 if (argv[i][2])
                     level_ = argv[i][2] - '0';
-                else
+                else {
+                    fprintf(stderr, "-m option parse error\n");
                     return -1;
+                }
             } else if (strncmp(argv[i], "-d", 2) == 0) {
                 int slen = strlen(argv[i]);
                 dict_size_ = atoi(argv[i] + 2);
@@ -130,22 +152,34 @@ int CSArc::ParseArg(int argc, char *argv[])
                     dict_size_ *= 1024;
                 else if ((argv[i][slen - 1] | 0x20) == 'm')
                     dict_size_ *= 1024 * 1024;
-                if (dict_size_ < 32 * 1024 || dict_size_ >= 1024 * 1024 * 1024)
+                if (dict_size_ < 32 * 1024 || dict_size_ > 1024 * 1024 * 1024) {
+                    fprintf(stderr, "-d option parse error, and should be between 32KB to 1GB\n");
                     return -1;
+                }
             } else if (strncmp(argv[i], "-r", 2) == 0) {
                 recurse_ = true;
             } else if (strncmp(argv[i], "-t", 2) == 0) {
                 if (argv[i][2])
                     mt_count_ = argv[i][2] - '0';
-                else
+                else {
+                    fprintf(stderr, "-t option parse error\n");
                     return -1;
-            } 
+                }
+            } else if (strcmp(argv[i], "-o") == 0) {
+                i++;
+                to_dir_ = argv[i];
+            } else if (strncmp(argv[i], "-p ", 2) == 0) {
+                split_count_ = atoi(argv[i] + 2);
+            } else 
+                return -1;
         } else 
             break;
 
     if (i == argc)
         return -1;
 
+    if (split_count_ <= 0)
+        split_count_ = 1;
     mt_count_ = mt_count_ < 1? 1 : mt_count_;
     mt_count_ = mt_count_ > 8? 8 : mt_count_;
 
@@ -154,14 +188,6 @@ int CSArc::ParseArg(int argc, char *argv[])
     for(; i < argc; i++)
         filenames_.push_back(argv[i]);
 
-    /*
-    // init the default settings
-    CSCEncProps_Init(&p, dict_size, level);
-    // Then make extra settings
-    for(int i = 0; i < param_end; i++)
-        if (ParseOpt(&p, argv[i]) < 0)
-            return -1;
-   */
     return 0;
 }
 
@@ -230,11 +256,14 @@ void CSArc::compress_index()
         f.seek(0, SEEK_END);
         uint32_t idx_compressed = f.tell() - arc_index_pos;
         char fs_buf[16];
+        //printf("llu compressed_size %lu\n", arc_index_pos, idx_compressed);
         Put8(arc_index_pos, fs_buf);
         Put4(idx_compressed, fs_buf + 8);
         Put4(index_size, fs_buf + 12);
-        printf("arc_index_pos, %llu compressed_size %lu\n", arc_index_pos, idx_compressed);
         f.write(fs_buf, 8, 16);
+        fs_buf[0] = 'C'; fs_buf[1] = 'S'; fs_buf[2] = 'A';  fs_buf[7] = '1';
+        Put4(0x20130331, fs_buf + 3);
+        f.write(fs_buf, 0, 8);
         f.close();
     }
 }
@@ -324,9 +353,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                         pib.bid = taskid;
                         pib.posblock = b.posblock;
                         pib.size = b.size;
-                        pib.posfile = 0;
-                        if (it->second.frags.size() > 0)
-                            printf("asdf");
+                        pib.posfile = b.off;
                         it->second.frags.push_back(pib);
                     }
                 }
@@ -357,7 +384,6 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
 void CSArc::decompress_mt(vector<MainTask> &tasks)
 {
     DecompressionWorker *workers[8];
-    uint32_t workertasks[8];
 
     Semaphore sem_workers;
     sem_workers.init(mt_count_);
@@ -365,7 +391,6 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
     for(int i = 0; i < mt_count_; i++) {
         workers[i] = new DecompressionWorker(sem_workers);
         workers[i]->Run();
-        workertasks[i] = tasks.size();
     }
 
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
@@ -376,7 +401,6 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
                 std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
                 abindex_[tasks[i].ab_id].filename = arcname_;
                 workers[j]->PutTask(tasks[i], abindex_[tasks[i].ab_id]);;
-                workertasks[j] = i;
                 break;
             }
         }
@@ -395,7 +419,7 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
 int CSArc::Add()
 {
     for (size_t i = 0; i < filenames_.size(); ++i) {
-        printf("Filenames: %s\n", filenames_[i].c_str());
+        //printf("Filenames: %s\n", filenames_[i].c_str());
         scandir(filenames_[i].c_str(), recurse_);
     }
 
@@ -415,19 +439,49 @@ int CSArc::Add()
     std::sort(itlist.begin(), itlist.end(), compareFuncByExt);
 
     vector<MainTask> tasks;
-    MainTask curtask;
 
+    uint32_t valid_file_count = 0;
+    bool single_file = false;
+    IterFileEntry sit; // single file iterator
     for(size_t i = 0; i < itlist.size(); i++) {
-        IterFileEntry it = itlist[i];
-        if (i && strncmp(it->second.ext, itlist[i-1]->second.ext, 4)) {
-            if (curtask.total_size)
-                tasks.push_back(curtask);
-            curtask.clear();
+        if (itlist[i]->second.esize > 0)
+            valid_file_count++;
+        if (valid_file_count == 1) {
+            single_file = true;
+            sit = itlist[i];
+        } else if (valid_file_count > 1) {
+            single_file = false;
+            break;
         }
-        curtask.push_back(it->first, 0, it->second.esize, 0);
     }
-    if (curtask.total_size)
-        tasks.push_back(curtask);
+
+    if (single_file) {
+        uint64_t split_size = sit->second.esize / split_count_;
+        split_size = split_size < 1048576 ? 1048576 : split_size;
+        split_size += 4;
+        uint64_t off = 0;
+        while(off < sit->second.esize) {
+            MainTask curtask;
+            uint64_t bsize = std::min<uint64_t>(split_size, sit->second.esize - off);
+            curtask.push_back(sit->first, off, bsize, 0);
+            off += bsize;
+            tasks.push_back(curtask);
+        }
+    } else {
+        MainTask curtask;
+        for(size_t i = 0; i < itlist.size(); i++) {
+            IterFileEntry it = itlist[i];
+            // mini solid block size is 64 * KB
+            if (i && strncmp(it->second.ext, itlist[i-1]->second.ext, 4) && curtask.total_size > 64 * 1024) {
+                if (curtask.total_size)
+                    tasks.push_back(curtask);
+                curtask.clear();
+            }
+            curtask.push_back(it->first, 0, it->second.esize, 0);
+        }
+        if (curtask.total_size)
+            tasks.push_back(curtask);
+    }
 
     {
         OutputFile f;
@@ -439,46 +493,44 @@ int CSArc::Add()
     compress_mt(tasks);
     compress_index();
 
-    /*
-    for(IterFileEntry it = index_.begin(); it != index_.end(); it++)
-        printf("%s %llu %llu\n", it->first.c_str(), it->second.esize, it->second.edate);
-    printf("==============\n");
-    //index_.clear();
-    abi.insert(make_pair(0, ab));
-    char *index_buf = PackIndex(index_, abi, index_size);
-
-    FileIndex fi2;
-    ABIndex abi2;
-    UnpackIndex(fi2, abi2, index_buf, index_size);
-
-    for(IterFileEntry it = fi2.begin(); it != fi2.end(); it++)
-        printf("%s %llu %llu\n", it->first.c_str(), it->second.esize, it->second.edate);
-    printf("==============\n");
- 
-
-    uint64_t i2 = 0;
-    char *index_buf2 = PackIndex(fi2, abi2, i2);
-    printf("pack %llu %llu\n", index_size, i2);
-    if (i2 == index_size) {
-        for(uint64_t i = 0; i < i2; i++) {
-            if (index_buf[i] != index_buf2[i]) {
-                printf("Not Match at %llu\n", i);
-                break;
-            }
-        }
+    {
+        OutputFile f;
+        f.open(arcname_.c_str());
+        f.seek(0, SEEK_END);
+        uint64_t compressed_size = f.tell();
+        f.close();
+        printf("Compressed Size: %llu\n", compressed_size);
     }
-
     return 0;
-    */
+}
 
-    printf("Arc: %s\n", arcname_.c_str());
+int CSArc::check_header()
+{
+    InputFile f;
+    char buf[8];
+    f.open(arcname_.c_str());
+    if (!f.isopen()) {
+        fprintf(stderr, "Can not open file %s\n", arcname_.c_str());
+        return -1;
+    }
+    f.read(buf, 8);
+    f.close();
+    uint32_t num;
+    Get4(num, buf + 3);
+    if (num != 0x20130331 || buf[0] != 'C'
+            || buf[1] != 'S' || buf[2] != 'A' || buf[7] != '1') {
+        fprintf(stderr, "Invalid csarc file\n");
+        return -1;
+    }
     return 0;
 }
 
 int CSArc::Extract()
 {
-    string to_dir = "/disk2/tmp/";
+    if (check_header() < 0)
+        return -1;
     decompress_index();
+
     vector<MainTask> tasks;
     map<uint64_t, size_t> idmap;
 
@@ -486,7 +538,7 @@ int CSArc::Extract()
         //printf("%s -> blocks: %d\n", it->first.c_str(), it->second.frags.size());
         if (filenames_.size() && !isselected(it->first.c_str()))
             continue;
-        string new_filename = to_dir + it->first;
+        string new_filename = to_dir_ + it->first;
         for(size_t fi = 0; fi < it->second.frags.size(); fi++) {
             MainTask *task = NULL;
             if (idmap.count(it->second.frags[fi].bid) == 0) {
@@ -514,11 +566,13 @@ int CSArc::Extract()
 
 int CSArc::List()
 {
+    if (check_header() < 0)
+        return -1;
     decompress_index();
     for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
         if (filenames_.size() && !isselected(it->first.c_str()))
             continue;
-        printf("%s %llu\n", it->first.c_str(), it->second.esize);
+        printf("%s %lld\n", it->first.c_str(), it->second.esize);
     }
     return 0;
 }
@@ -641,18 +695,6 @@ bool CSArc::isselected(const char* filename) {
       if (ispath(filenames_[i].c_str(), filename))
         matched=true;
   }
-  /*
-  if (matched && onlyfiles.size()>0) {
-    matched=false;
-    for (int i=0; i<size(onlyfiles) && !matched; ++i)
-      if (ispath(onlyfiles[i].c_str(), filename))
-        matched=true;
-  }
-  for (int i=0; matched && i<size(notfiles); ++i) {
-    if (ispath(notfiles[i].c_str(), filename))
-      matched=false;
-  }
-  */
   return matched;
 }
 
@@ -662,14 +704,17 @@ int main(int argc, char *argv[])
     CSArc csarc;
 
     if (argc < 3) {
+        fprintf(stderr, "At least two arguments, command and archive name\n");
         csarc.Usage();
         return 1;
     }
 
     char op = argv[1][0];
 
-    if (csarc.ParseArg(argc - 2, argv + 2) < 0)
+    if (csarc.ParseArg(argc - 2, argv + 2) < 0) {
+        csarc.Usage();
         return 1;
+    }
 
     switch(op) {
         case 'a':
@@ -685,9 +730,9 @@ int main(int argc, char *argv[])
             csarc.Extract();
             break;
         default:
+            csarc.Usage();
             fprintf(stderr, "Invalid command '%c'\n", op);
             return 1;
-            break;
     }
 
     return 0;

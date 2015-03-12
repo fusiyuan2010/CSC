@@ -46,6 +46,11 @@ public:
     }
 
     virtual ~AsyncReader() {
+        while(!queue_.empty()) {
+            Block &b = queue_.front();
+            delete[] b.buf;
+            queue_.pop_front();
+        }
         destroy_mutex(lock_);
         sem_full_.destroy();
         sem_empty_.destroy();
@@ -86,8 +91,12 @@ public:
     }
 
     virtual void Finish() {
+        lock(lock_);
+        finished_ = true;
+        release(lock_);
+        sem_full_.signal();
+        join(iothread_);
     }
-
 };
 
 
@@ -149,6 +158,11 @@ public:
     }
 
     virtual ~AsyncWriter() {
+        while(!queue_.empty()) {
+            Block &b = queue_.front();
+            delete[] b.buf;
+            queue_.pop_front();
+        }
         delete[] curblock_.buf;
         destroy_mutex(lock_);
         sem_full_.destroy();
@@ -266,7 +280,6 @@ public:
     }
 
     ~AsyncFileReader() {
-        join(iothread_);
     }
 };
 
@@ -451,6 +464,10 @@ class AsyncArchiveReader : public AsyncReader {
     void *run() {
         while(1) {
             lock(lock_);
+            if (finished_) {
+                release(lock_);
+                break;
+            }
             if (size_ >= bufsize_) {
                 release(lock_);
                 sem_full_.wait();
@@ -503,7 +520,6 @@ public:
     }
 
     ~AsyncArchiveReader() {
-        join(iothread_);
         if_.close();
     }
 };

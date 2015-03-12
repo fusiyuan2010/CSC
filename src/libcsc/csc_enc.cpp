@@ -13,11 +13,12 @@ struct CSCInstance
 
 void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
 {
+    dict_size += 10 * KB; // a little more, real size is 8KB smaller than set number
     if (dict_size < 32 * KB) dict_size = 32 * KB;
     if (dict_size > 1024 * MB) dict_size = 1024 * MB;
+    p->dict_size = dict_size; 
     if (level < 1) level = 1;
     if (level > 5) level = 5;
-    p->dict_size = dict_size + 10 * KB; // a little more, real size is 8KB smaller than set number
     p->DLTFilter = 1;
     p->TXTFilter = 1;
     p->EXEFilter = 1;

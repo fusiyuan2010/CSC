@@ -475,7 +475,7 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
                 cpy_pos = wnd_curpos_ >= dist? 
                     wnd_curpos_ - dist : wnd_curpos_ + wnd_size_ - dist;
                 if (cpy_pos > wnd_size_ || cpy_pos + len >wnd_size_ || len + i > limit)
-                    return DECODE_ERROR;
+                    throw (int)DECODE_ERROR;
 
                 cpy_dst = wnd_ + wnd_curpos_;
                 cpy_src = wnd_ + cpy_pos;
@@ -499,7 +499,7 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
                     decode_repdist_match(repdist_idx, len);
                     len += 2;
                     if (len + i > limit) 
-                        return DECODE_ERROR;
+                        throw (int)DECODE_ERROR;
 
                     dist = rep_dist_[repdist_idx];
                     for(int j = repdist_idx ; j > 0; j--) 
@@ -509,7 +509,7 @@ int CSCDecoder::lz_decode(uint8_t *dst, uint32_t *size, uint32_t limit)
                     cpy_pos = wnd_curpos_ >= dist? 
                         wnd_curpos_ - dist : wnd_curpos_ + wnd_size_ - dist;
                     if (cpy_pos + len >wnd_size_ || len + i > limit) 
-                        return DECODE_ERROR;
+                        throw (int)DECODE_ERROR;
                     cpy_dst = wnd_ + wnd_curpos_;
                     cpy_src = wnd_ + cpy_pos;
                     i += len;
@@ -605,7 +605,7 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
                 filters_->Inverse_Delta(dst, *size, chnNum);
                 lz_copy2dict(dst, *size);
             } else {
-                return DECODE_ERROR;
+                throw (int)DECODE_ERROR;
             }
             break;
     }

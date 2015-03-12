@@ -64,7 +64,7 @@ struct MainTask {
             IterFileEntry it = IterFileEntry()) {
         FileBlock b;
         b.filename = filename;
-        b.off = 0;
+        b.off = off;
         b.size = size;
         b.posblock = posblock;
         b.it = it;
