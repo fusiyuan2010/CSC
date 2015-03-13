@@ -61,13 +61,12 @@ class CSArc {
     void decompress_mt(vector<MainTask> &tasks);
 
 public:
-    int Add();                // add, return 1 if error else 0
-    int Extract();            // extract, return 1 if error else 0
-    int List();               // list, return 1 if compare = finds a mismatch
-    int Test();               // test, return 1 if error else 0
-    void Usage();             // help
+    int Add();                
+    int Extract();            
+    int List();               
+    int Test();               
+    void Usage();             
     int ParseArg(int argc, char *argv[]);
-    //====
 };
 
 bool compareFuncByPosblock(FileBlock a, FileBlock b) {
@@ -336,6 +335,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
 
     abindex_.clear();
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
+    // sem_workers has initilized with value (mt_count_)
     for(uint32_t i = 0; i < tasks.size() + mt_count_; i++) {
         sem_workers.wait();
         for(int j = 0; j < mt_count_; j++) {
@@ -344,6 +344,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                 // update index based on info generated while compression
                 uint32_t taskid = workertasks[j];
                 if (taskid < tasks.size()) {
+                    // means a task is finished
                     vector<FileBlock>& filelist = tasks[taskid].filelist;
                     for(size_t i = 0; i < filelist.size(); i++) {
                         FileBlock &b = filelist[i];
@@ -360,6 +361,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                 // mark it as a invalid value
                 workertasks[j] = tasks.size();
 
+                // don't add task for the last several(mt_count_) finishing thread
                 if (i < tasks.size()) {
                     // keep adding remind tasks
                     // task id is always equal to archive id 
@@ -367,8 +369,8 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                     abindex_[i].filename = arcname_;
                     workers[j]->PutTask(tasks[i], abindex_[i]);;
                     workertasks[j] = i;
+                    break;
                 }
-                break;
             }
         }
     }
@@ -460,7 +462,7 @@ int CSArc::Add()
         split_size = split_size < 1048576 ? 1048576 : split_size;
         split_size += 4;
         uint64_t off = 0;
-        while(off < sit->second.esize) {
+        while(off < (uint64_t)sit->second.esize) {
             MainTask curtask;
             uint64_t bsize = std::min<uint64_t>(split_size, sit->second.esize - off);
             curtask.push_back(sit->first, off, bsize, 0);
@@ -538,7 +540,18 @@ int CSArc::Extract()
         //printf("%s -> blocks: %d\n", it->first.c_str(), it->second.frags.size());
         if (filenames_.size() && !isselected(it->first.c_str()))
             continue;
-        string new_filename = to_dir_ + it->first;
+        string new_filename = it->first;
+        if (new_filename.size() > 1 && new_filename[1] == ':') {
+            if (new_filename.size() > 2 && new_filename[2] == '/')
+                new_filename = new_filename.substr(0, 1) + new_filename.substr(2);
+            else
+                new_filename[1] = '/';
+        }
+        if (new_filename[0] != '/' && *to_dir_.rbegin() != '/')
+            new_filename = to_dir_ + '/' + new_filename;
+        else
+            new_filename = to_dir_ + new_filename;
+
         for(size_t fi = 0; fi < it->second.frags.size(); fi++) {
             MainTask *task = NULL;
             if (idmap.count(it->second.frags[fi].bid) == 0) {

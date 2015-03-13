@@ -184,6 +184,7 @@ bool UnpackIndex(FileIndex &fi, ABIndex &abi, char *buf, uint64_t total_size)
     char *tmp = buf, *limit = buf + total_size;
     (void)total_size;
 
+    (void)limit;
     fi.clear();
     abi.clear();
     uint32_t isize;
