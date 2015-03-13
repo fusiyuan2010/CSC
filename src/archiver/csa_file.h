@@ -132,43 +132,24 @@ public:
 
 class InputFile {
   HANDLE in;  // input file handle
-  DWORD n;    // buffer size
 public:
   InputFile():
-    in(INVALID_HANDLE_VALUE), n(0) {}
+    in(INVALID_HANDLE_VALUE) {}
 
   // Open for reading. Return true if successful.
   // Encrypt with aes+e if aes.
-  bool open(const char* filename, libzpaq::AES_CTR* a=0, int64_t e=0) {
+  bool open(const char* filename) {
     assert(in==INVALID_HANDLE_VALUE);
-    n=ptr=0;
     std::wstring w=utow(filename, true);
     in=CreateFile(w.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (in==INVALID_HANDLE_VALUE) winError(filename);
-    aes=a;
-    eoff=e;
+    if (in==INVALID_HANDLE_VALUE){
+        fprintf(stderr, "File open error %s\n", filename);
+    }
     return in!=INVALID_HANDLE_VALUE;
   }
 
   bool isopen() {return in!=INVALID_HANDLE_VALUE;}
-
-  // Read 1 byte
-  int get() {
-    if (ptr>=int(n)) {
-      assert(ptr==int(n));
-      ptr=0;
-      ReadFile(in, &buf[0], BUFSIZE, &n, NULL);
-      if (n==0) return EOF;
-      if (aes) {
-        int64_t off=tell()+eoff;
-        if (off<32) error("attempt to read salt");
-        aes->encrypt(&buf[0], n, off);
-      }
-    }
-    assert(ptr<int(n));
-    return buf[ptr++]&255;
-  }
 
   // set file pointer
   void seek(int64_t pos, int whence) {
@@ -180,7 +161,6 @@ public:
     }
     LONG offhigh=pos>>32;
     SetFilePointer(in, pos, &offhigh, whence);
-    n=ptr=0;
   }
 
   // get file pointer
@@ -213,17 +193,16 @@ public:
 
   // Open file ready to update or append, create if needed.
   // If aes then encrypt with aes+e.
-  bool open(const char* filename_, libzpaq::AES_CTR* a=0, int64_t e=0) {
+  bool open(const char* filename_) {
     assert(!isopen());
     ptr=0;
     filename=utow(filename_, true);
     out=CreateFile(filename.c_str(), GENERIC_READ | GENERIC_WRITE,
                    0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (out==INVALID_HANDLE_VALUE) winError(filename_);
-    else {
+    if (out==INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "File open error %s\n", filename);
+    } else {
       LONG hi=0;
-      aes=a;
-      eoff=e;
       SetFilePointer(out, 0, &hi, FILE_END);
     }
     return isopen();
@@ -248,16 +227,6 @@ public:
       }
       ptr=0;
     }
-  }
-
-  // Write 1 byte
-  void put(int c) {
-    assert(isopen());
-    if (ptr>=BUFSIZE) {
-      assert(ptr==BUFSIZE);
-      flush();
-    }
-    buf[ptr++]=c;
   }
 
   // Write bufp[0..size-1]

@@ -5,6 +5,7 @@
 #include <csa_typedef.h>
 #include <csa_thread.h>
 #include <deque>
+#include <algorithm>
 
 class AsyncReader;
 class AsyncWriter;
@@ -34,7 +35,7 @@ protected:
     uint32_t bufsize_;
     volatile bool finished_;
 
-    virtual void *run() = 0;
+    virtual ThreadReturn run() = 0;
 
 public:
     AsyncReader() :
@@ -128,7 +129,7 @@ protected:
     }
 
     std::deque<Block> queue_;
-    virtual void *run() = 0;
+    virtual ThreadReturn run() = 0;
 
     void flush() {
         if (curblock_.size > 0) {
@@ -427,7 +428,7 @@ struct MemReader {
 inline int mem_read_proc(void *p, void *buf, size_t *size)
 {
     MemReader *r = (MemReader*)p;
-    uint64_t s = std::min(*size, r->size - r->pos);
+    uint64_t s = std::min<uint64_t>(*size, r->size - r->pos);
     memcpy(buf, r->ptr + r->pos, s);
     r->pos += s;
     *size = s;
@@ -444,7 +445,7 @@ struct MemWriter {
 inline size_t mem_write_proc(void *p, const void *buf, size_t size) 
 {
     MemWriter *r = (MemWriter*)p;
-    uint64_t s = std::min(size, r->size - r->pos);
+    uint64_t s = std::min<uint64_t>(size, r->size - r->pos);
     memcpy(r->ptr + r->pos, buf, s);
     r->pos += s;
     return s;

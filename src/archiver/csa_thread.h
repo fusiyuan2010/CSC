@@ -58,7 +58,7 @@ typedef DWORD ThreadReturn;
 typedef HANDLE ThreadID;
 void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg) {
   tid=CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL);
-  if (tid==NULL) error("CreateThread failed");
+  //if (tid==NULL) error("CreateThread failed");
 }
 void join(ThreadID& tid) {WaitForSingleObject(tid, INFINITE);}
 typedef HANDLE Mutex;
