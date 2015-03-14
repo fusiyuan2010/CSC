@@ -48,6 +48,7 @@ class CSArc {
     string arcname_;           // archive name
     vector<string> filenames_;     // filename args
     bool recurse_;
+    bool verbose_;
     int mt_count_;
     int split_count_;
     string to_dir_;
@@ -112,11 +113,15 @@ void CSArc::Usage()
     fprintf(stderr, "\t         -o out_dir Extraction output directory\n");
     fprintf(stderr, "\t\n");
     fprintf(stderr, "List file(s) in archive:\n");
-    fprintf(stderr, "\tcsarc l archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\tcsarc l [options] archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\t      [options] can be:\n");
+    fprintf(stderr, "\t         -v         Shows fragment information with Adler32 hash\n");
     fprintf(stderr, "\t\n");
     fprintf(stderr, "Test to extract file(s) in archive:\n");
     fprintf(stderr, "\tcsarc t [options] archive_name [file1_in_arc file2_in_arc ...]\n");
+    fprintf(stderr, "\t      [options] can be:\n");
     fprintf(stderr, "\t         -t#        Multithreading-number, range in [1,8]\n");
+    fprintf(stderr, "\t\n");
     fprintf(stderr, "Example:\n");
     fprintf(stderr, "\tcsarc a -m2 -d64m -r -t2 out.csa /disk2/*\n");
     fprintf(stderr, "\tcsarc x -t2 -o /tmp/ out.csa *.jpg\n");
@@ -132,6 +137,7 @@ int CSArc::ParseArg(int argc, char *argv[])
     level_ = 2;
     mt_count_ = 1;
     split_count_ = 1;
+    verbose_ = false;
 
     to_dir_ = "./";
     for(; i < argc; i++)
@@ -156,6 +162,8 @@ int CSArc::ParseArg(int argc, char *argv[])
                 }
             } else if (strncmp(argv[i], "-r", 2) == 0) {
                 recurse_ = true;
+            } else if (strncmp(argv[i], "-v", 2) == 0) {
+                verbose_ = true;
             } else if (strncmp(argv[i], "-t", 2) == 0) {
                 if (argv[i][2])
                     mt_count_ = argv[i][2] - '0';
@@ -354,6 +362,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                         pib.posblock = b.posblock;
                         pib.size = b.size;
                         pib.posfile = b.off;
+                        pib.adler32 = b.adler32;
                         it->second.frags.push_back(pib);
                     }
                 }
@@ -464,7 +473,7 @@ int CSArc::Add()
         while(off < (uint64_t)sit->second.esize) {
             MainTask curtask;
             uint64_t bsize = std::min<uint64_t>(split_size, sit->second.esize - off);
-            curtask.push_back(sit->first, off, bsize, 0);
+            curtask.push_back(sit->first, off, bsize, 0, 0);
             off += bsize;
             tasks.push_back(curtask);
         }
@@ -478,7 +487,7 @@ int CSArc::Add()
                     tasks.push_back(curtask);
                 curtask.clear();
             }
-            curtask.push_back(it->first, 0, it->second.esize, 0);
+            curtask.push_back(it->first, 0, it->second.esize, 0, 0);
         }
         if (curtask.total_size)
             tasks.push_back(curtask);
@@ -562,7 +571,7 @@ int CSArc::Extract()
                 task = &tasks[idmap[it->second.frags[fi].bid]];
             FileEntry::Frag& ff = it->second.frags[fi];
             if (ff.size)
-                task->push_back(new_filename, ff.posfile, ff.size, ff.posblock, it);
+                task->push_back(new_filename, ff.posfile, ff.size, ff.posblock, ff.adler32, it);
         }
         makepath(new_filename, it->second.edate, it->second.eattr);
         if (*new_filename.rbegin() != '/') {
@@ -584,13 +593,48 @@ int CSArc::List()
     for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
         if (filenames_.size() && !isselected(it->first.c_str()))
             continue;
-        printf("%s %lld\n", it->first.c_str(), it->second.esize);
+        if (verbose_)
+        for(size_t i = 0; i < it->second.frags.size(); i++) {
+            printf("Fragment %1d, in archive block %lu, Adler32: 0x%08x\t\t", 
+                    i, it->second.frags[i].bid, it->second.frags[i].adler32);
+            if (i + 1 < it->second.frags.size())
+                printf("\n");
+        }
+        printf("%s %lld\t\t\t\t", it->first.c_str(), it->second.esize);
+        printf("\n");
     }
     return 0;
 }
 
 int CSArc::Test()
 {
+    if (check_header() < 0)
+        return -1;
+    decompress_index();
+
+    vector<MainTask> tasks;
+    map<uint64_t, size_t> idmap;
+
+    for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
+        //printf("%s -> blocks: %d\n", it->first.c_str(), it->second.frags.size());
+        if (filenames_.size() && !isselected(it->first.c_str()))
+            continue;
+
+        for(size_t fi = 0; fi < it->second.frags.size(); fi++) {
+            MainTask *task = NULL;
+            if (idmap.count(it->second.frags[fi].bid) == 0) {
+                idmap[it->second.frags[fi].bid] = tasks.size();
+                tasks.push_back(MainTask());
+                task = &tasks[idmap[it->second.frags[fi].bid]];
+                task->ab_id = it->second.frags[fi].bid;
+            } else 
+                task = &tasks[idmap[it->second.frags[fi].bid]];
+            FileEntry::Frag& ff = it->second.frags[fi];
+            if (ff.size)
+                task->push_back(DUMMY_FILENAME, ff.posfile, ff.size, ff.posblock, ff.adler32, it);
+        }
+    }
+    decompress_mt(tasks);
     return 0;
 }
 
@@ -722,6 +766,7 @@ bool CSArc::isselected(const char* filename) {
 int main(int argc, char *argv[])
 {
     CSArc csarc;
+    fprintf(stderr, "CSArc 3.3, experimential archiver by Siyuan Fu (https://github.com/fusiyuan2010)\n");
 
     if (argc < 3) {
         fprintf(stderr, "At least two arguments, command and archive name\n");

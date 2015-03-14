@@ -4,6 +4,7 @@
 #include <csa_file.h>
 #include <csa_typedef.h>
 #include <csa_thread.h>
+#include <csa_adler32.h>
 #include <deque>
 #include <algorithm>
 
@@ -246,6 +247,7 @@ class AsyncFileReader : public AsyncReader {
             char *buf = new char[rdsize];
             // read and push to queue
             rdsize = if_.read(buf, rdsize);
+            filelist_[curfidx_].adler32 = adler32(filelist_[curfidx_].adler32, (const uint8_t *)buf, rdsize);
             Block b;
             b.prog = 0;
             b.size = rdsize;
@@ -291,6 +293,7 @@ class AsyncFileWriter : public AsyncWriter {
     uint64_t curbprog_;
     uint64_t cumsize_;
     bool done_;
+    uint32_t curadler32_;
  
     OutputFile of_;
 
@@ -316,12 +319,11 @@ class AsyncFileWriter : public AsyncWriter {
             if (cumsize_ + b.size > filelist_[curfidx_].posblock) {
                 if (!of_.isopen()) {
                     //printf("Opening %s\n", filelist_[curfidx_].filename.c_str());
-                    if (filelist_[curfidx_].filename == "/disk2/tmp//disk2/D/cr/app1/check_soundcard.vbs")
-                        printf("sb");
                     if (!of_.open(filelist_[curfidx_].filename.c_str())) {
                         curfidx_++;
                         if (curfidx_ >= filelist_.size()) {
                             done_ = true;
+                            finished_ = true;
                             sem_full_.signal();
                         }
                         release(lock_);
@@ -329,18 +331,24 @@ class AsyncFileWriter : public AsyncWriter {
                     }
                     curfprog_ = 0;
                     of_.seek(filelist_[curfidx_].off, SEEK_SET);
+                    curadler32_ = 0;
                 }
                 
                 uint64_t wrsize = std::min<uint64_t>(b.size - curbprog_, filelist_[curfidx_].size - curfprog_);
                 of_.write(b.buf + curbprog_, wrsize);
+                curadler32_ = adler32(curadler32_, (const uint8_t *)b.buf + curbprog_, wrsize);
                 curfprog_ += wrsize;
                 curbprog_ += wrsize;
                 if (curfprog_ ==  filelist_[curfidx_].size) {
                     of_.close(filelist_[curfidx_].it->second.edate,
                         filelist_[curfidx_].it->second.eattr);
+                    if (filelist_[curfidx_].adler32 != curadler32_)
+                        printf("ERROR");
+
                     curfidx_++;
                     if (curfidx_ >= filelist_.size()) {
                         done_ = true;
+                        finished_ = true;
                         sem_full_.signal();
                     }
                 }
@@ -388,7 +396,9 @@ public:
         sem_empty_.signal();
         join(iothread_);
         if (of_.isopen()) {
-            filelist_[curfidx_].size = curfprog_;
+            if (filelist_[curfidx_].adler32 != curadler32_)
+                fprintf(stderr, "******** %s extraction/verify failed\n", filelist_[curfidx_].it->first.c_str());
+            //filelist_[curfidx_].size = curfprog_;
             of_.close(filelist_[curfidx_].it->second.edate,
                     filelist_[curfidx_].it->second.eattr);
         }

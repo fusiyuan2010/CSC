@@ -111,6 +111,8 @@ inline int tolowerW(int c) {
 }
 
 
+static const string DUMMY_FILENAME = "****";
+
 // In Windows, convert 16-bit wide string to UTF-8 and \ to /
 #ifndef unix
 inline string wtou(const wchar_t* s) {
