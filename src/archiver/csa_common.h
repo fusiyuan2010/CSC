@@ -112,6 +112,43 @@ inline int tolowerW(int c) {
 
 static const string DUMMY_FILENAME = "****";
 
+// In Windows, convert 16-bit wide string to UTF-8 and \ to /
+#ifndef unix
+inline string wtou(const wchar_t* s) {
+  assert(sizeof(wchar_t)==2);  // Not true in Linux
+  assert((wchar_t)(-1)==65535);
+  string r;
+  if (!s) return r;
+  for (; *s; ++s) {
+    if (*s=='\\') r+='/';
+    else if (*s<128) r+=*s;
+    else if (*s<2048) r+=192+*s/64, r+=128+*s%64;
+    else r+=224+*s/4096, r+=128+*s/64%64, r+=128+*s%64;
+  }
+  return r;
+}
+
+// In Windows, convert UTF-8 string to wide string ignoring
+// invalid UTF-8 or >64K. If doslash then convert "/" to "\".
+inline std::wstring utow(const char* ss, bool doslash=false) {
+  assert(sizeof(wchar_t)==2);
+  assert((wchar_t)(-1)==65535);
+  std::wstring r;
+  if (!ss) return r;
+  const unsigned char* s=(const unsigned char*)ss;
+  for (; s && *s; ++s) {
+    if (s[0]=='/' && doslash) r+='\\';
+    else if (s[0]<128) r+=s[0];
+    else if (s[0]>=192 && s[0]<224 && s[1]>=128 && s[1]<192)
+      r+=(s[0]-192)*64+s[1]-128, ++s;
+    else if (s[0]>=224 && s[0]<240 && s[1]>=128 && s[1]<192
+             && s[2]>=128 && s[2]<192)
+      r+=(s[0]-224)*4096+(s[1]-128)*64+s[2]-128, s+=2;
+  }
+  return r;
+}
+#endif
+
 #endif
 
 
