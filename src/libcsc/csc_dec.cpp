@@ -669,7 +669,7 @@ void CSCDec_ReadProperties(CSCProps *props, uint8_t *s)
 {
     props->dict_size = ((uint32_t)s[0] << 24) + (s[1] << 16) + (s[2] << 8) + s[3];
     props->csc_blocksize = ((uint32_t)s[4] << 16) + (s[5] << 8) + s[6];
-    props->raw_blocksize = ((uint32_t)s[7] << 24) + (s[8] << 8) + s[9];
+    props->raw_blocksize = ((uint32_t)s[7] << 16) + (s[8] << 8) + s[9];
 }
 
 int CSCDec_Decode(CSCDecHandle p, 

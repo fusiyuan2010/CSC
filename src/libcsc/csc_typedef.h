@@ -15,20 +15,6 @@ const uint32_t MinDictSize = 32 * KB;//Don't change
 #define MAX(a,b) ((a)>(b)?(a):(b))
 
 
-/*****ERRORS*****************/
-/*
-#define CANT_OPEN_FILE (-100)
-#define CANT_CREATE_FILE (-99)
-#define NOT_CSC_FILE (-98)
-#define VERSION_INVALID (-97)
-#define CSC_FILE_INVALID (-95)
-#define CANT_ALLOC_MEM (-94)
-#define ALREADY_INITIALIZED (-93)
-#define OPERATION_ERROR (-92)
-#define FILE_DIDNT_OPEN (-91)
-*/
-/*****ERRORS*****************/
-
 /******Block Type*************/
 const uint32_t DT_NONE = 0x00;
 const uint32_t DT_NORMAL = 0x01;

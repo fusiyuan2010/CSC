@@ -17,6 +17,7 @@
 #endif
 #endif
 
+
 #ifdef unix
 
 class InputFile {
@@ -62,7 +63,7 @@ class OutputFile {
   string filename;
   bool dummy;
 public:
-  OutputFile(): out(0) {}
+  OutputFile(): out(0), dummy(false) {}
 
   // Return true if file is open
   bool isopen() {return out!=0;}
@@ -205,10 +206,11 @@ public:
 };
 
 class OutputFile {
-  HANDLE out;               // output file handle
-  std::wstring filename;    // filename as wide string
+  HANDLE out;          
+  std::wstring filename;    
+  bool dummy;
 public:
-  OutputFile(): out(INVALID_HANDLE_VALUE) {}
+  OutputFile(): out(INVALID_HANDLE_VALUE),dummy(false) {}
 
   // Return true if file is open
   bool isopen() {
@@ -219,11 +221,19 @@ public:
   // If aes then encrypt with aes+e.
   bool open(const char* filename_) {
     assert(!isopen());
+    dummy = (filename_ == DUMMY_FILENAME);
+    if (dummy) {
+        out = (HANDLE)1;
+        return true;
+    }
     filename=utow(filename_, true);
     out=CreateFile(filename.c_str(), GENERIC_READ | GENERIC_WRITE,
-                   0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        FILE_SHARE_READ | FILE_SHARE_WRITE, 
+        NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (out==INVALID_HANDLE_VALUE) {
         fprintf(stderr, "File open error %s\n", filename);
+        DWORD x = GetLastError();
+        printf("%d", x);
     } else {
       LONG hi=0;
       SetFilePointer(out, 0, &hi, FILE_END);
@@ -234,12 +244,15 @@ public:
   // Write bufp[0..size-1]
   void write(const char* buf, int size) {
         DWORD size_written;
-        ReadFile(out, (LPVOID)buf, size, &size_written, NULL);   
+        if (!dummy)
+            WriteFile(out, (LPVOID)buf, size, &size_written, NULL);   
   }
 
   // Write size bytes at offset
   void write(const char* buf, int64_t pos, int size) {
     assert(isopen());
+    if (dummy)
+        return;
     if (pos!=tell()) seek(pos, SEEK_SET);
     write(buf, size);
   }
@@ -250,18 +263,23 @@ public:
     else if (whence==SEEK_CUR) whence=FILE_CURRENT;
     else if (whence==SEEK_END) whence=FILE_END;
     LONG offhigh=pos>>32;
-    SetFilePointer(out, pos, &offhigh, whence);
+    if (!dummy)
+        SetFilePointer(out, pos, &offhigh, whence);
   }
 
   // get file pointer
   int64_t tell() {
     LONG offhigh=0;
+    if (dummy)
+        return 0;
     DWORD r=SetFilePointer(out, 0, &offhigh, FILE_CURRENT);
     return (int64_t(offhigh)<<32)+r;
   }
 
   // Truncate file and move file pointer to end
   void truncate(int64_t newsize=0) {
+    if (dummy)
+        return;
     seek(newsize, SEEK_SET);
     SetEndOfFile(out);
   }
@@ -269,6 +287,11 @@ public:
   // Close file and set date if not 0. Set attr if low byte is 'w'.
   void close(int64_t date=0, int64_t attr=0) {
     if (isopen()) {
+        if (dummy) {
+            out=INVALID_HANDLE_VALUE;
+            dummy = false;
+            return;
+        }
       setDate(out, date);
       CloseHandle(out);
       out=INVALID_HANDLE_VALUE;

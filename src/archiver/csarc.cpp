@@ -435,10 +435,14 @@ int CSArc::Add()
 
     vector<IterFileEntry> itlist;
     for(IterFileEntry it = index_.begin(); it != index_.end(); it++) {
+        if (*it->first.rbegin() == '/' ) 
+            continue;
         itlist.push_back(it);
         //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
         size_t dot = it->first.find_last_of('.');
-        if (dot == string::npos) {
+        size_t slash = it->first.find_last_of('/');
+        if (dot == string::npos 
+            || (slash != string::npos && dot < slash)) {
             memset(it->second.ext, 0, 4);
         } else {
             for(size_t i = 0; i < 4 && i + dot + 1 < it->first.size(); i++)

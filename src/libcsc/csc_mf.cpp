@@ -46,8 +46,8 @@ int MatchFinder::Init(uint8_t *wnd,
 
     size_ = HT2_SIZE_ + HT3_SIZE_ + (1 << ht_bits_) * ht_width_;
     if (bt_bits_) {
-        size_ += (1 << bt_bits_);
-        size_ += bt_size_ * 2;
+        size_ += (1 << (uint64_t)bt_bits_);
+        size_ += (uint64_t)bt_size_ * 2;
     }
 
     mfbuf_raw_ = (uint32_t *)malloc(sizeof(uint32_t) * size_ + 128);
@@ -70,7 +70,7 @@ int MatchFinder::Init(uint8_t *wnd,
 
     if (bt_bits_) {
         bt_head_ = mfbuf_ + cpos;
-        cpos += (1 << bt_bits_);
+        cpos += (1 << (uint64_t)bt_bits_);
         bt_nodes_ = mfbuf_ + cpos;
         cpos += bt_size_ * 2;
     }

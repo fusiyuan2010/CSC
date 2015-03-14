@@ -343,7 +343,7 @@ class AsyncFileWriter : public AsyncWriter {
                     of_.close(filelist_[curfidx_].it->second.edate,
                         filelist_[curfidx_].it->second.eattr);
                     if (filelist_[curfidx_].adler32 != curadler32_)
-                        printf("ERROR");
+                        fprintf(stderr, "******** %s extraction/verify failed\n", filelist_[curfidx_].it->first.c_str());
 
                     curfidx_++;
                     if (curfidx_ >= filelist_.size()) {

@@ -24,7 +24,7 @@ void makepath(string path, int64_t date, int64_t attr) {
 
   // Set date and attributes
   string filename=path;
-  if (filename!="" && filename[filename.size()-1]=='/')
+  if (filename!="" && filename[filename.size()-1]=='/') {
     filename=filename.substr(0, filename.size()-1);  // remove trailing slash
 #ifdef unix
   if (date>0) {
@@ -46,10 +46,13 @@ void makepath(string path, int64_t date, int64_t attr) {
       setDate(out, date);
       CloseHandle(out);
     }
-    else winError(filename.c_str());
+    else {
+        winError(filename.c_str());
+    }
   }
   if ((attr&255)=='w') {
     SetFileAttributes(utow(filename.c_str(), true).c_str(), attr>>8);
+  }
   }
 #endif
 }
