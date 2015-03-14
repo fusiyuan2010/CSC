@@ -163,11 +163,17 @@ public:
     SetFilePointer(in, pos, &offhigh, whence);
   }
 
+    uint32_t read(char *buf, uint32_t size) {
+        DWORD size_read;
+        ReadFile(in, (LPVOID)buf, size, &size_read, NULL);
+        return size_read;
+    }
+
   // get file pointer
   int64_t tell() {
     LONG offhigh=0;
     DWORD r=SetFilePointer(in, 0, &offhigh, FILE_CURRENT);
-    return (int64_t(offhigh)<<32)+r+ptr-n;
+    return (int64_t(offhigh)<<32)+r;
   }
 
   // Close handle if open
@@ -195,7 +201,6 @@ public:
   // If aes then encrypt with aes+e.
   bool open(const char* filename_) {
     assert(!isopen());
-    ptr=0;
     filename=utow(filename_, true);
     out=CreateFile(filename.c_str(), GENERIC_READ | GENERIC_WRITE,
                    0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -208,36 +213,17 @@ public:
     return isopen();
   }
 
-  // Write pending output
-  void flush() {
-    assert(isopen());
-    if (ptr) {
-      DWORD n=0;
-      if (aes) {
-        int64_t off=tell()-ptr+eoff;
-        if (off<32) error("attempt to overwrite salt");
-        aes->encrypt(&buf[0], ptr, off);
-      }
-      WriteFile(out, &buf[0], ptr, &n, NULL);
-      if (ptr!=int(n)) {
-        fprintf(stderr, "%s: error %d: wrote %d of %d bytes\n",
-                wtou(filename.c_str()).c_str(), int(GetLastError()),
-                int(n), ptr);
-        error("write failed");
-      }
-      ptr=0;
-    }
+  // Write bufp[0..size-1]
+  void write(const char* buf, int size) {
+        DWORD size_written;
+        ReadFile(out, (LPVOID)buf, size, &size_written, NULL);   
   }
 
-  // Write bufp[0..size-1]
-  void write(const char* bufp, int size);
-
   // Write size bytes at offset
-  void write(const char* bufp, int64_t pos, int size) {
+  void write(const char* buf, int64_t pos, int size) {
     assert(isopen());
-    flush();
     if (pos!=tell()) seek(pos, SEEK_SET);
-    write(bufp, size);
+    write(buf, size);
   }
 
   // set file pointer
@@ -245,7 +231,6 @@ public:
     if (whence==SEEK_SET) whence=FILE_BEGIN;
     else if (whence==SEEK_CUR) whence=FILE_CURRENT;
     else if (whence==SEEK_END) whence=FILE_END;
-    flush();
     LONG offhigh=pos>>32;
     SetFilePointer(out, pos, &offhigh, whence);
   }
@@ -254,7 +239,7 @@ public:
   int64_t tell() {
     LONG offhigh=0;
     DWORD r=SetFilePointer(out, 0, &offhigh, FILE_CURRENT);
-    return (int64_t(offhigh)<<32)+r+ptr;
+    return (int64_t(offhigh)<<32)+r;
   }
 
   // Truncate file and move file pointer to end
@@ -266,7 +251,6 @@ public:
   // Close file and set date if not 0. Set attr if low byte is 'w'.
   void close(int64_t date=0, int64_t attr=0) {
     if (isopen()) {
-      flush();
       setDate(out, date);
       CloseHandle(out);
       out=INVALID_HANDLE_VALUE;
@@ -279,31 +263,6 @@ public:
 };
 
 #endif
-
-/*
-string output_rename(string name) {
-  if (tofiles.size()==0) return name;  // same name
-  if (files.size()==0) {  // append prefix tofiles[0]
-    int n=name.size();
-    if (n>1 && name[1]==':') {  // remove : from drive letter
-      if (n>2 && name[2]=='/') name=name.substr(0, 1)+name.substr(2), --n;
-      else name[1]='/';
-    }
-    if (n>0 && name[0]!='/') name="/"+name;  // insert / if needed
-    return tofiles[0]+name;
-  }
-  else {  // replace prefix files[i] with tofiles[i]
-    const int n=name.size();
-    for (int i=0; i<size(files) && i<size(tofiles); ++i) {
-      const int fn=files[i].size();
-      if (fn<=n && files[i]==name.substr(0, fn))
-        return tofiles[i]+name.substr(fn);
-    }
-  }
-  return name;
-}
-*/
-
 
 void makepath(string path, int64_t date=0, int64_t attr=0);
 

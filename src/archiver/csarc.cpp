@@ -1,6 +1,5 @@
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
-#define UNICODE  // For Windows
 #include <csa_common.h>
 #include <csa_typedef.h>
 #include <csa_thread.h>
@@ -593,6 +592,14 @@ int CSArc::List()
 int CSArc::Test()
 {
     return 0;
+}
+
+// Return the part of fn up to the last slash
+string path(const string& fn) {
+  int n=0;
+  for (int i=0; fn[i]; ++i)
+    if (fn[i]=='/' || fn[i]=='\\') n=i+1;
+  return fn.substr(0, n);
 }
 
 void CSArc::scandir(string filename, bool recurse) {

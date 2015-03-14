@@ -211,7 +211,7 @@ class AsyncFileReader : public AsyncReader {
     uint64_t cumsize_;
     InputFile if_;
 
-    void *run() {
+    ThreadReturn run() {
         while(1) {
             lock(lock_);
             if (size_ >= bufsize_) {
@@ -266,7 +266,7 @@ class AsyncFileReader : public AsyncReader {
                 curfidx_ ++;
             }
         }
-        return NULL;
+        return (ThreadReturn)NULL;
     }
 
 public:
@@ -294,7 +294,7 @@ class AsyncFileWriter : public AsyncWriter {
  
     OutputFile of_;
 
-    void *run() {
+    ThreadReturn run() {
         while(1) {
             lock(lock_);
             if (done_) {
@@ -462,7 +462,7 @@ class AsyncArchiveReader : public AsyncReader {
     size_t curbprog_;
     InputFile if_;
 
-    void *run() {
+    ThreadReturn run() {
         while(1) {
             lock(lock_);
             if (finished_) {
@@ -505,7 +505,7 @@ class AsyncArchiveReader : public AsyncReader {
                     break;
             }
         }
-        return NULL;
+        return (ThreadReturn)NULL;
     }
 
 public:
@@ -530,7 +530,7 @@ class AsyncArchiveWriter : public AsyncWriter {
     OutputFile of_;
     Mutex& arc_lock_;
 
-    void *run() {
+    ThreadReturn run() {
         while(1) {
             lock(lock_);
             if (size_ == 0) {
@@ -565,7 +565,7 @@ class AsyncArchiveWriter : public AsyncWriter {
             release(lock_);
             sem_full_.signal();
         }
-        return NULL;
+        return (ThreadReturn)NULL;
     }
  
 public:

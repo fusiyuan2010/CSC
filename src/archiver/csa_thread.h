@@ -56,16 +56,16 @@ private:
 #else  // Windows
 typedef DWORD ThreadReturn;
 typedef HANDLE ThreadID;
-void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg) {
+inline void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg) {
   tid=CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL);
   //if (tid==NULL) error("CreateThread failed");
 }
-void join(ThreadID& tid) {WaitForSingleObject(tid, INFINITE);}
+inline void join(ThreadID& tid) {WaitForSingleObject(tid, INFINITE);}
 typedef HANDLE Mutex;
-void init_mutex(Mutex& m) {m=CreateMutex(NULL, FALSE, NULL);}
-void lock(Mutex& m) {WaitForSingleObject(m, INFINITE);}
-void release(Mutex& m) {ReleaseMutex(m);}
-void destroy_mutex(Mutex& m) {CloseHandle(m);}
+inline void init_mutex(Mutex& m) {m=CreateMutex(NULL, FALSE, NULL);}
+inline void lock(Mutex& m) {WaitForSingleObject(m, INFINITE);}
+inline void release(Mutex& m) {ReleaseMutex(m);}
+inline void destroy_mutex(Mutex& m) {CloseHandle(m);}
 
 class Semaphore {
 public:

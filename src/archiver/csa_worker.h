@@ -20,7 +20,7 @@ private:
     static ThreadReturn entrance(void *arg) 
     {
         MainWorker *worker = (MainWorker *)arg; 
-        return worker->run();
+        return (ThreadReturn)worker->run();
     }
 
     virtual void do_work() = 0; 

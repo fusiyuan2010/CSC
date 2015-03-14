@@ -110,6 +110,7 @@ inline int tolowerW(int c) {
   return c;
 }
 
+
 // In Windows, convert 16-bit wide string to UTF-8 and \ to /
 #ifndef unix
 inline string wtou(const wchar_t* s) {
@@ -145,6 +146,66 @@ inline std::wstring utow(const char* ss, bool doslash=false) {
   }
   return r;
 }
+
+// Print a UTF-8 string to f (stdout, stderr) so it displays properly
+inline void printUTF8(const char* s, FILE* f) {
+  assert(f);
+  assert(s);
+#ifdef unix
+  fprintf(f, "%s", s);
+#else
+  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
+  DWORD ft=GetFileType(h);
+  if (ft==FILE_TYPE_CHAR) {
+    fflush(f);
+    std::wstring w=utow(s);  // Windows console: convert to UTF-16
+    DWORD n=0;
+    WriteConsole(h, w.c_str(), w.size(), &n, 0);
+  }
+  else  // stdout redirected to file
+    fprintf(f, "%s", s);
+#endif
+}
+// Print error message
+inline void winError(const char* filename) {
+  int err=GetLastError();
+  printUTF8(filename, stderr);
+  if (err==ERROR_FILE_NOT_FOUND)
+    fprintf(stderr, ": file not found\n");
+  else if (err==ERROR_PATH_NOT_FOUND)
+    fprintf(stderr, ": path not found\n");
+  else if (err==ERROR_ACCESS_DENIED)
+    fprintf(stderr, ": access denied\n");
+  else if (err==ERROR_SHARING_VIOLATION)
+    fprintf(stderr, ": sharing violation\n");
+  else if (err==ERROR_BAD_PATHNAME)
+    fprintf(stderr, ": bad pathname\n");
+  else if (err==ERROR_INVALID_NAME)
+    fprintf(stderr, ": invalid name\n");
+  else
+    fprintf(stderr, ": Windows error %d\n", err);
+}
+
+// Set the last-modified date of an open file handle
+inline void setDate(HANDLE out, int64_t date) {
+  if (date>0) {
+    SYSTEMTIME st;
+    FILETIME ft;
+    st.wYear=date/10000000000LL%10000;
+    st.wMonth=date/100000000%100;
+    st.wDayOfWeek=0;  // ignored
+    st.wDay=date/1000000%100;
+    st.wHour=date/10000%100;
+    st.wMinute=date/100%100;
+    st.wSecond=date%100;
+    st.wMilliseconds=0;
+    SystemTimeToFileTime(&st, &ft);
+    if (!SetFileTime(out, NULL, NULL, &ft))
+      fprintf(stderr, "SetFileTime error %d\n", int(GetLastError()));
+  }
+}
+
+
 #endif
 
 #endif
