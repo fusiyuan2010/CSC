@@ -17,6 +17,7 @@ struct FileEntry {
   char ext[4];
   struct Frag{
       uint32_t bid;
+      uint32_t adler32;
       uint64_t posblock;
       uint64_t size;
       uint64_t posfile;
@@ -31,6 +32,7 @@ typedef FileIndex::iterator IterFileEntry;
 // For raw files I/O
 struct FileBlock {
     string filename;
+    uint32_t adler32;
     uint64_t off;
     uint64_t size;
     uint64_t posblock;
@@ -60,7 +62,7 @@ struct MainTask {
     MainTask() 
         : total_size(0) {}
 
-    void push_back(const string& filename, uint64_t off, uint64_t size, uint64_t posblock, 
+    void push_back(const string& filename, uint64_t off, uint64_t size, uint64_t posblock, uint32_t adler32, 
             IterFileEntry it = IterFileEntry()) {
         FileBlock b;
         b.filename = filename;
@@ -68,6 +70,7 @@ struct MainTask {
         b.size = size;
         b.posblock = posblock;
         b.it = it;
+        b.adler32 = adler32;
         filelist.push_back(b);
         total_size += size;
     }

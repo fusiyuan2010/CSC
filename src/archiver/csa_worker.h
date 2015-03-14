@@ -13,6 +13,7 @@ protected:
 
     MainTask *task_;
     ArchiveBlocks* abs_;
+    int last_ret_;
 
 private:
     bool finished_;
@@ -23,7 +24,7 @@ private:
         return worker->run();
     }
 
-    virtual void do_work() = 0; 
+    virtual int do_work() = 0; 
 
     void *run() {
         while(1) {
@@ -31,7 +32,7 @@ private:
             if (finished_)
                 break;
 
-            do_work();
+            last_ret_ = do_work();
 
             task_ = NULL;
             sem_finish_.signal();
@@ -43,6 +44,7 @@ public:
     MainWorker(Semaphore &sem) :
         sem_finish_(sem),
         task_(NULL),
+        last_ret_(0),
         finished_(false) {
             got_task_.init(0);
         }
@@ -62,6 +64,10 @@ public:
     bool TaskDone() {
         return task_ == NULL;
     }
+
+    int LastReturn() {
+        return last_ret_;
+    }
     
     void Finish() {
         finished_ = true;
@@ -74,7 +80,7 @@ class CompressionWorker: public MainWorker {
     int level_;
     uint32_t dict_size_;
     Mutex& arc_lock_;
-    void do_work();
+    int do_work();
 public:
     CompressionWorker(Semaphore &sem, Mutex& arc_lock, int level, int dict_size) :
         MainWorker(sem),
@@ -87,7 +93,7 @@ public:
 };
 
 class DecompressionWorker: public MainWorker {
-    void do_work();
+    int do_work();
 public:
     DecompressionWorker(Semaphore &sem) :
         MainWorker(sem)

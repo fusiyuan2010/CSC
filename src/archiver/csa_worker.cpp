@@ -4,7 +4,7 @@
 #include <csc_dec.h>
 
 
-void CompressionWorker::do_work() 
+int CompressionWorker::do_work() 
 {
     FileReader file_reader;
     file_reader.obj = new AsyncFileReader(task_->filelist, 
@@ -27,17 +27,18 @@ void CompressionWorker::do_work()
     file_writer.obj->Run();
     file_writer.obj->Write(buf, CSC_PROP_SIZE);
 
-    CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
+    int ret = CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
     CSCEnc_Encode_Flush(h);
     CSCEnc_Destroy(h);
     file_reader.obj->Finish();
     file_writer.obj->Finish();
     delete file_writer.obj;
     delete file_reader.obj;
+    return ret;
 }
 
 
-void DecompressionWorker::do_work() 
+int DecompressionWorker::do_work() 
 {
     FileReader file_reader;
     file_reader.obj = new AsyncArchiveReader(*abs_, 8 * 1048576);
@@ -56,12 +57,13 @@ void DecompressionWorker::do_work()
     file_reader.obj->Read(buf, &prop_size);
     CSCDec_ReadProperties(&p, buf);
     CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader);
-    CSCDec_Decode(h, (ISeqOutStream*)&file_writer, NULL);
+    int ret = CSCDec_Decode(h, (ISeqOutStream*)&file_writer, NULL);
     CSCDec_Destroy(h);
 
     file_reader.obj->Finish();
     file_writer.obj->Finish();
     delete file_reader.obj;
     delete file_writer.obj;
+    return ret;
 }
 

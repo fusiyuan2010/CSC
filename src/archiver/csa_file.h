@@ -60,6 +60,7 @@ public:
 class OutputFile {
   FILE* out;
   string filename;
+  bool dummy;
 public:
   OutputFile(): out(0) {}
 
@@ -71,6 +72,11 @@ public:
   bool open(const char* filename) {
     assert(!isopen());
     this->filename=filename;
+    dummy = (this->filename == DUMMY_FILENAME);
+    if (dummy) {
+        out = (FILE *)1;
+        return true;
+    }
     out=fopen(filename, "rb+");
     if (!out) out=fopen(filename, "wb+");
     if (!out) perror(filename);
@@ -80,37 +86,49 @@ public:
 
   // Write bufp[0..size-1]
   void write(const char* bufp, int size) {
-      fwrite(bufp, 1, size, out);
+      if (!dummy) fwrite(bufp, 1, size, out);
   }
 
   // Write size bytes at offset
   void write(const char* bufp, int64_t pos, int size) {
     assert(isopen());
-    fseeko(out, pos, SEEK_SET);
-    write(bufp, size);
+    if (!dummy) {
+        fseeko(out, pos, SEEK_SET);
+        write(bufp, size);
+    }
   }
 
   // Seek to pos. whence is SEEK_SET, SEEK_CUR, or SEEK_END
   void seek(int64_t pos, int whence) {
     assert(isopen());
-    fseeko(out, pos, whence);
+    if (!dummy) {
+        fseeko(out, pos, whence);
+    }
   }
 
   // return position
   int64_t tell() {
     assert(isopen());
-    return ftello(out);
+    if (!dummy)
+        return ftello(out);
+    else
+        return 0;
   }
 
   // Truncate file and move file pointer to end
   void truncate(int64_t newsize=0) {
     assert(isopen());
     seek(newsize, SEEK_SET);
-    if (ftruncate(fileno(out), newsize)) perror("ftruncate");
+    if (!dummy && ftruncate(fileno(out), newsize)) perror("ftruncate");
   }
 
   // Close file and set date if not 0. Set permissions if attr low byte is 'u'
   void close(int64_t date=0, int64_t attr=0) {
+    if (dummy) {
+        dummy = false;
+        out = 0;
+        return;
+    }
     if (out) {
       fclose(out);
     }

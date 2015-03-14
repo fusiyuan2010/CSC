@@ -110,6 +110,8 @@ inline int tolowerW(int c) {
   return c;
 }
 
+static const string DUMMY_FILENAME = "****";
+
 #endif
 
 
