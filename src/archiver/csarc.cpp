@@ -397,6 +397,7 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
 
     Semaphore sem_workers;
     sem_workers.init(mt_count_);
+    int decomp_ret = 0;
 
     for(int i = 0; i < mt_count_; i++) {
         workers[i] = new DecompressionWorker(sem_workers);
@@ -411,6 +412,8 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
                 std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
                 abindex_[tasks[i].ab_id].filename = arcname_;
                 workers[j]->PutTask(tasks[i], abindex_[tasks[i].ab_id]);;
+                if (workers[j]->LastReturn() < 0)
+                    decomp_ret = workers[j]->LastReturn();
                 break;
             }
         }
@@ -418,11 +421,21 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
 
     for(int i = 0; i < mt_count_; i++) {
         sem_workers.wait();
+        for(int j = 0; j < mt_count_; j++) {
+            if (workers[j]->TaskDone()) {
+                if (workers[j]->LastReturn() < 0)
+                    decomp_ret = workers[j]->LastReturn();
+            }
+        }
     }
 
     for(int i = 0; i < mt_count_; i++) {
         workers[i]->Finish();
         delete workers[i];
+    }
+
+    if (decomp_ret < 0) {
+        fprintf(stderr, "Extraction error, archive corrupted\n");
     }
 }
 
@@ -478,8 +491,8 @@ int CSArc::Add()
             MainTask curtask;
             uint64_t bsize = std::min<uint64_t>(split_size, sit->second.esize - off);
             curtask.push_back(sit->first, off, bsize, 0, 0);
-            off += bsize;
             tasks.push_back(curtask);
+            off += bsize;
         }
     } else {
         MainTask curtask;

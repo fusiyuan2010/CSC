@@ -53,8 +53,9 @@ void makepath(string path, int64_t date, int64_t attr) {
   if ((attr&255)=='w') {
     SetFileAttributes(utow(filename.c_str(), true).c_str(), attr>>8);
   }
-  }
 #endif
+  }
 }
+
 
 

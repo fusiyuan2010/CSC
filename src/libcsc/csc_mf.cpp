@@ -189,23 +189,23 @@ void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
             // for 'BAD' data, only a small subset of data will be test by MF
             i++;
             pos_++;
+            if (++bt_pos_ >= bt_size_) bt_pos_ -= bt_size_;
             continue;
         }
 
         if (ht_width_) {
             h = HASH6(wnd_ + wpos, ht_bits_);
             uint32_t *ht6 = ht6_ + h * ht_width_;
-            //for(uint32_t i = ht_width_ - 1; i > 0; i--)
-            //    ht6[i] = ht6[i-1];
+            for(uint32_t i = ht_width_ - 1; i > 0; i--)
+                ht6[i] = ht6[i-1];
             ht6[0] = pos_;
         }
 
         if (bt_head_) { 
-            if (bt_pos_ >= bt_size_) bt_pos_ -= bt_size_;
             h = HASH6(wnd_ + wpos, bt_bits_);
             bt_nodes_[bt_pos_ * 2] = bt_nodes_[bt_pos_ * 2 + 1] = 0;
             bt_head_[h] = pos_;
-            bt_pos_++;
+            if (++bt_pos_ >= bt_size_) bt_pos_ -= bt_size_;
         }
 
         i ++;
