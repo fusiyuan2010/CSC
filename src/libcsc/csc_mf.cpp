@@ -185,7 +185,7 @@ void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
         uint32_t wpos = wnd_pos + i;
         if (pos_ >= 0xFFFFFFF0) normalize();
         h = HASH2(wnd_ + wpos);
-        if (h % 23 && h % 29) {
+        if (h % 16 && h % 23) {
             // for 'BAD' data, only a small subset of data will be test by MF
             i++;
             pos_++;
@@ -451,7 +451,7 @@ bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
     uint32_t dists[9] = {wnd_size_, wnd_size_};
     uint32_t depth = 0;
     uint32_t h = HASH2(src);
-    if (h % 23 && h % 29) 
+    if (h % 16 && h % 23) 
         // for 'BAD' data, only a small subset of data will be test by MF
         return false;
 
