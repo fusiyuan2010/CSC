@@ -448,7 +448,7 @@ MFUnit MatchFinder::FindMatch(uint32_t *rep_dist, uint32_t wnd_pos, uint32_t lim
 
 bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
 {
-    uint32_t dists[8] = {wnd_size_, wnd_size_};
+    uint32_t dists[9] = {wnd_size_, wnd_size_};
     uint32_t depth = 0;
     uint32_t h = HASH2(src);
     if (h % 23 && h % 29) 
@@ -457,8 +457,8 @@ bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
 
     if (ht_width_) {
         h = HASH6(src, ht_bits_);
-        //for(uint32_t i = 0; i < ht_width_ && i < 8; i++)
-        dists[depth++] = pos_ - ht6_[h * ht_width_];
+        for(uint32_t i = 0; i < ht_width_ && i < 8; i++)
+            dists[depth++] = pos_ - ht6_[h * ht_width_];
     } 
 
     if (bt_head_) {
@@ -480,6 +480,7 @@ bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
         if (pcur - src > 18)
+            // enough long match
             return true;
     }
     return false;

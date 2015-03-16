@@ -199,7 +199,7 @@ void LZ::compress_normal(uint32_t size, bool lazy)
 
 void LZ::compress_mf_skip(uint32_t size)
 {
-    mf_.SlidePos(wnd_curpos_, size, size);
+    mf_.SlidePosFast(wnd_curpos_, size);
     wnd_curpos_ += size;
 }
 

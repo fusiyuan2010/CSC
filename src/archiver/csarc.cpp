@@ -80,7 +80,7 @@ bool compareFuncByExt(IterFileEntry a, IterFileEntry b) {
         return ret < 0;
     else {
         // do not sort very small files
-        if (a->second.esize > 64 * 1024 && b->second.esize > 64 * 1024)
+        if (a->second.esize > 64 * 1024 || b->second.esize > 64 * 1024)
             return a->second.esize < b->second.esize;
         else {
             return a->first < b->first;
@@ -454,7 +454,7 @@ int CSArc::Add()
         //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
         size_t dot = it->first.find_last_of('.');
         size_t slash = it->first.find_last_of('/');
-        if (dot == string::npos 
+        if (dot == string::npos
             || (slash != string::npos && dot < slash)) {
             memset(it->second.ext, 0, 4);
         } else {

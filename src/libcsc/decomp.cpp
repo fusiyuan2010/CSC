@@ -24,8 +24,7 @@ int stdio_read(void *p, void *buf, size_t *size)
 size_t stdio_write(void *p, const void *buf, size_t size)
 {
     StdioSeqStream *sss = (StdioSeqStream *)p;
-    //return fwrite(buf, 1, size, sss->f);
-    return size;
+    return fwrite(buf, 1, size, sss->f);
 }
 
 int show_progress(void *p, UInt64 insize, UInt64 outsize)

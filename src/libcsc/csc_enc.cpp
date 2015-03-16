@@ -83,7 +83,8 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
             p->lz_mode = 3;
             p->good_len = 48;
             p->bt_cyc = 32;
-            p->bt_size = p->dict_size;
+            //p->bt_size = p->dict_size;
+            p->hash_width = 2;
             break;
     }
 
