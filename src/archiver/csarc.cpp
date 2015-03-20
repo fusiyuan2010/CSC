@@ -103,6 +103,7 @@ void CSArc::Usage()
     fprintf(stderr, "\t         -m[1..5]   Compression level from most efficient to strongest\n");
     fprintf(stderr, "\t         -d##[k|m]  Dictionary size, must be range in [32KB, 1GB]\n");
     fprintf(stderr, "\t         -r         Recursively adding files in directories\n");
+    fprintf(stderr, "\t         -f         Forcely overwrite existing archive\n");
     fprintf(stderr, "\t         -p##       Only works with single file compression, split\n");
     fprintf(stderr, "\t         -t#        Multithreading-number, range in [1,8]\n");
     fprintf(stderr, "\t                    Memory usage will be multiplied by this number\n");
@@ -472,10 +473,10 @@ int CSArc::Add()
 {
     {
         // check if file already exists
-        IutputFile f;
+        InputFile f;
         f.open(arcname_.c_str());
-        if (f.isOpen() && !overwrite_) {
-            fprintf(stderr, "Archive %s already exists, use -f to force overwrite\n");
+        if (f.isopen() && !overwrite_) {
+            fprintf(stderr, "Archive %s already exists, use -f to force overwrite\n", arcname_.c_str());
             return 1;
         }
         f.close();
