@@ -247,7 +247,7 @@ class AsyncFileReader : public AsyncReader {
             char *buf = new char[rdsize];
             // read and push to queue
             rdsize = if_.read(buf, rdsize);
-            filelist_[curfidx_].adler32 = adler32(filelist_[curfidx_].adler32, (const uint8_t *)buf, rdsize);
+            filelist_[curfidx_].checksum = adler32(filelist_[curfidx_].checksum, (const uint8_t *)buf, rdsize);
             Block b;
             b.prog = 0;
             b.size = rdsize;
@@ -293,7 +293,7 @@ class AsyncFileWriter : public AsyncWriter {
     uint64_t curbprog_;
     uint64_t cumsize_;
     bool done_;
-    uint32_t curadler32_;
+    uint32_t curchecksum_;
  
     OutputFile of_;
 
@@ -331,18 +331,21 @@ class AsyncFileWriter : public AsyncWriter {
                     }
                     curfprog_ = 0;
                     of_.seek(filelist_[curfidx_].off, SEEK_SET);
-                    curadler32_ = 0;
+                    curchecksum_ = 0;
+                    // skip the unnecessary data in front of current file
+                    if (cumsize_ + curbprog_ < filelist_[curfidx_].posblock)
+                        curbprog_ += filelist_[curfidx_].posblock - cumsize_ - curbprog_;
                 }
                 
                 uint64_t wrsize = std::min<uint64_t>(b.size - curbprog_, filelist_[curfidx_].size - curfprog_);
                 of_.write(b.buf + curbprog_, wrsize);
-                curadler32_ = adler32(curadler32_, (const uint8_t *)b.buf + curbprog_, wrsize);
+                curchecksum_ = adler32(curchecksum_, (const uint8_t *)b.buf + curbprog_, wrsize);
                 curfprog_ += wrsize;
                 curbprog_ += wrsize;
                 if (curfprog_ ==  filelist_[curfidx_].size) {
                     of_.close(filelist_[curfidx_].it->second.edate,
                         filelist_[curfidx_].it->second.eattr);
-                    if (filelist_[curfidx_].adler32 != curadler32_)
+                    if (filelist_[curfidx_].checksum != curchecksum_)
                         fprintf(stderr, "******** %s extraction/verify failed\n", filelist_[curfidx_].it->first.c_str());
 
                     curfidx_++;
@@ -396,7 +399,7 @@ public:
         sem_empty_.signal();
         join(iothread_);
         if (of_.isopen()) {
-            if (filelist_[curfidx_].adler32 != curadler32_)
+            if (filelist_[curfidx_].checksum != curchecksum_)
                 fprintf(stderr, "******** %s extraction/verify failed\n", filelist_[curfidx_].it->first.c_str());
             //filelist_[curfidx_].size = curfprog_;
             of_.close(filelist_[curfidx_].it->second.edate,

@@ -3,6 +3,22 @@
 #include <csc_enc.h>
 #include <csc_dec.h>
 
+struct ProgressObject {
+    ICompressProgress p;
+    MainWorker *w;
+};
+
+static int decompress_update_progress(void *p, UInt64 insize, UInt64 outsize) {
+    ProgressObject *po = (ProgressObject *)p;
+    po->w->processed_raw_ = outsize;
+    return 0;
+}
+
+static int compress_update_progress(void *p, UInt64 insize, UInt64 outsize) {
+    ProgressObject *po = (ProgressObject *)p;
+    po->w->processed_raw_ = insize;
+    return 0;
+}
 
 int CompressionWorker::do_work() 
 {
@@ -15,8 +31,6 @@ int CompressionWorker::do_work()
     file_writer.obj = new AsyncArchiveWriter(*abs_, 8 * 1048576, arc_lock_);
     file_writer.os.Write = file_write_proc;
 
-    //ICompressProgress prog;
-    //prog.Progress = show_progress;
     CSCProps p;
     CSCEncProps_Init(&p, std::min<uint32_t>(dict_size_, task_->total_size), level_);
     CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
@@ -27,7 +41,11 @@ int CompressionWorker::do_work()
     file_writer.obj->Run();
     file_writer.obj->Write(buf, CSC_PROP_SIZE);
 
-    int ret = CSCEnc_Encode(h, (ISeqInStream*)&file_reader, NULL);
+    ProgressObject prog;
+    prog.p.Progress = compress_update_progress;
+    prog.w = this;
+
+    int ret = CSCEnc_Encode(h, (ISeqInStream*)&file_reader, (ICompressProgress*)&prog);
     CSCEnc_Encode_Flush(h);
     CSCEnc_Destroy(h);
     file_reader.obj->Finish();
@@ -51,13 +69,17 @@ int DecompressionWorker::do_work()
     file_reader.obj->Run();
     file_writer.obj->Run();
 
+    ProgressObject prog;
+    prog.p.Progress = decompress_update_progress;
+    prog.w = this;
+
     CSCProps p;
     uint8_t buf[CSC_PROP_SIZE];
     size_t prop_size = CSC_PROP_SIZE; 
     file_reader.obj->Read(buf, &prop_size);
     CSCDec_ReadProperties(&p, buf);
     CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader);
-    int ret = CSCDec_Decode(h, (ISeqOutStream*)&file_writer, NULL);
+    int ret = CSCDec_Decode(h, (ISeqOutStream*)&file_writer, (ICompressProgress*)&prog);
     CSCDec_Destroy(h);
 
     file_reader.obj->Finish();

@@ -7,6 +7,7 @@
 #include <csa_worker.h>
 #include <csa_io.h>
 #include <csa_indexpack.h>
+#include <csa_progress.h>
 
 // Return true if strings a == b or a+"/" is a prefix of b
 // or a ends in "/" and is a prefix of b.
@@ -49,6 +50,7 @@ class CSArc {
     vector<string> filenames_;     // filename args
     bool recurse_;
     bool verbose_;
+    bool overwrite_;
     int mt_count_;
     int split_count_;
     string to_dir_;
@@ -138,6 +140,7 @@ int CSArc::ParseArg(int argc, char *argv[])
     mt_count_ = 1;
     split_count_ = 1;
     verbose_ = false;
+    overwrite_ = false;
 
     to_dir_ = "./";
     for(; i < argc; i++)
@@ -162,6 +165,8 @@ int CSArc::ParseArg(int argc, char *argv[])
                 }
             } else if (strncmp(argv[i], "-r", 2) == 0) {
                 recurse_ = true;
+            } else if (strncmp(argv[i], "-f", 2) == 0) {
+                overwrite_ = true;
             } else if (strncmp(argv[i], "-v", 2) == 0) {
                 verbose_ = true;
             } else if (strncmp(argv[i], "-t", 2) == 0) {
@@ -172,8 +177,12 @@ int CSArc::ParseArg(int argc, char *argv[])
                     return -1;
                 }
             } else if (strcmp(argv[i], "-o") == 0) {
-                i++;
-                to_dir_ = argv[i];
+                if (argv[i][2] == '\0') {
+                    i++;
+                    to_dir_ = argv[i];
+                } else {
+                    to_dir_ = argv[i] + 2;
+                }
             } else if (strncmp(argv[i], "-p ", 2) == 0) {
                 split_count_ = atoi(argv[i] + 2);
             } else 
@@ -343,6 +352,10 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
     abindex_.clear();
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
     // sem_workers has initilized with value (mt_count_)
+
+    ProgressIndicator pi(tasks, (const MainWorker**)workers, mt_count_);
+    pi.Run();
+
     for(uint32_t i = 0; i < tasks.size() + mt_count_; i++) {
         sem_workers.wait();
         for(int j = 0; j < mt_count_; j++) {
@@ -362,9 +375,10 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
                         pib.posblock = b.posblock;
                         pib.size = b.size;
                         pib.posfile = b.off;
-                        pib.adler32 = b.adler32;
+                        pib.checksum = b.checksum;
                         it->second.frags.push_back(pib);
                     }
+                    tasks[taskid].finished = true;
                 }
                 // mark it as a invalid value
                 workertasks[j] = tasks.size();
@@ -389,11 +403,13 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
         workers[i]->Finish();
         delete workers[i];
     }
+    pi.Finish();
 }
 
 void CSArc::decompress_mt(vector<MainTask> &tasks)
 {
     DecompressionWorker *workers[8];
+    uint32_t workertasks[8];
 
     Semaphore sem_workers;
     sem_workers.init(mt_count_);
@@ -402,16 +418,25 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
     for(int i = 0; i < mt_count_; i++) {
         workers[i] = new DecompressionWorker(sem_workers);
         workers[i]->Run();
+        workertasks[i] = tasks.size();
     }
 
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
+    ProgressIndicator pi(tasks, (const MainWorker**)workers, mt_count_);
+    pi.Run();
+
     for(uint32_t i = 0; i < tasks.size(); i++) {
         sem_workers.wait();
         for(int j = 0; j < mt_count_; j++) {
             if (workers[j]->TaskDone()) {
+                uint32_t taskid = workertasks[j];
+                if (taskid < tasks.size())
+                    tasks[taskid].finished = true;
+
                 std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
                 abindex_[tasks[i].ab_id].filename = arcname_;
                 workers[j]->PutTask(tasks[i], abindex_[tasks[i].ab_id]);;
+                workertasks[j] = i;
                 if (workers[j]->LastReturn() < 0)
                     decomp_ret = workers[j]->LastReturn();
                 break;
@@ -423,6 +448,9 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
         sem_workers.wait();
         for(int j = 0; j < mt_count_; j++) {
             if (workers[j]->TaskDone()) {
+                uint32_t taskid = workertasks[j];
+                if (taskid < tasks.size())
+                    tasks[taskid].finished = true;
                 if (workers[j]->LastReturn() < 0)
                     decomp_ret = workers[j]->LastReturn();
             }
@@ -433,6 +461,7 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
         workers[i]->Finish();
         delete workers[i];
     }
+    pi.Finish();
 
     if (decomp_ret < 0) {
         fprintf(stderr, "Extraction error, archive corrupted\n");
@@ -441,6 +470,18 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
 
 int CSArc::Add()
 {
+    {
+        // check if file already exists
+        IutputFile f;
+        f.open(arcname_.c_str());
+        if (f.isOpen() && !overwrite_) {
+            fprintf(stderr, "Archive %s already exists, use -f to force overwrite\n");
+            return 1;
+        }
+        f.close();
+    }
+
+
     for (size_t i = 0; i < filenames_.size(); ++i) {
         //printf("Filenames: %s\n", filenames_[i].c_str());
         scandir(filenames_[i].c_str(), recurse_);
@@ -454,9 +495,10 @@ int CSArc::Add()
         //printf("%s: %lld\n", it->first.c_str(), it->second.esize);
         size_t dot = it->first.find_last_of('.');
         size_t slash = it->first.find_last_of('/');
+        memset(it->second.ext, 0, 5);
         if (dot == string::npos
             || (slash != string::npos && dot < slash)) {
-            memset(it->second.ext, 0, 4);
+            // do nothing
         } else {
             for(size_t i = 0; i < 4 && i + dot + 1 < it->first.size(); i++)
                 it->second.ext[i] = tolower(it->first[i + dot + 1]);
@@ -500,8 +542,7 @@ int CSArc::Add()
             IterFileEntry it = itlist[i];
             // mini solid block size is 64 * KB
             if (i && strncmp(it->second.ext, itlist[i-1]->second.ext, 4) && curtask.total_size > 64 * 1024) {
-                if (curtask.total_size)
-                    tasks.push_back(curtask);
+                tasks.push_back(curtask);
                 curtask.clear();
             }
             curtask.push_back(it->first, 0, it->second.esize, 0, 0);
@@ -567,7 +608,7 @@ int CSArc::Extract()
             continue;
         string new_filename = it->first;
         if (new_filename.size() > 1 && new_filename[1] == ':') {
-            if (new_filename.size() > 2 && new_filename[2] == '/')
+            if (new_filename.size() > 2 && (new_filename[2] == '/' || new_filename[2] == '\\'))
                 new_filename = new_filename.substr(0, 1) + new_filename.substr(2);
             else
                 new_filename[1] = '/';
@@ -576,6 +617,9 @@ int CSArc::Extract()
             new_filename = to_dir_ + '/' + new_filename;
         else
             new_filename = to_dir_ + new_filename;
+        for(size_t i = 0; i < new_filename.size(); i++)
+            if (new_filename[i] == '\\')
+                new_filename[i] = '/';
 
         for(size_t fi = 0; fi < it->second.frags.size(); fi++) {
             MainTask *task = NULL;
@@ -588,7 +632,7 @@ int CSArc::Extract()
                 task = &tasks[idmap[it->second.frags[fi].bid]];
             FileEntry::Frag& ff = it->second.frags[fi];
             if (ff.size)
-                task->push_back(new_filename, ff.posfile, ff.size, ff.posblock, ff.adler32, it);
+                task->push_back(new_filename, ff.posfile, ff.size, ff.posblock, ff.checksum, it);
         }
         makepath(new_filename, it->second.edate, it->second.eattr);
         if (*new_filename.rbegin() != '/') {
@@ -613,7 +657,7 @@ int CSArc::List()
         if (verbose_)
         for(size_t i = 0; i < it->second.frags.size(); i++) {
             printf("Fragment %1d, in archive block %lu, Adler32: 0x%08x\t\t", 
-                    i, it->second.frags[i].bid, it->second.frags[i].adler32);
+                    i, it->second.frags[i].bid, it->second.frags[i].checksum);
             if (i + 1 < it->second.frags.size())
                 printf("\n");
         }
@@ -648,7 +692,7 @@ int CSArc::Test()
                 task = &tasks[idmap[it->second.frags[fi].bid]];
             FileEntry::Frag& ff = it->second.frags[fi];
             if (ff.size)
-                task->push_back(DUMMY_FILENAME, ff.posfile, ff.size, ff.posblock, ff.adler32, it);
+                task->push_back(DUMMY_FILENAME, ff.posfile, ff.size, ff.posblock, ff.checksum, it);
         }
     }
     decompress_mt(tasks);

@@ -15,6 +15,9 @@ protected:
     ArchiveBlocks* abs_;
     int last_ret_;
 
+public:
+    uint64_t processed_raw_;
+
 private:
     bool finished_;
 
@@ -33,6 +36,7 @@ private:
                 break;
 
             last_ret_ = do_work();
+            processed_raw_ = 0;
 
             task_ = NULL;
             sem_finish_.signal();
@@ -41,10 +45,11 @@ private:
     }
 
 public:
-    MainWorker(Semaphore &sem) :
+    MainWorker(Semaphore &sem):
         sem_finish_(sem),
         task_(NULL),
         last_ret_(0),
+        processed_raw_(0),
         finished_(false) {
             got_task_.init(0);
         }
@@ -74,6 +79,10 @@ public:
         got_task_.signal();
         ::join(thread_);
     }
+
+    uint64_t GetProcessedRawSize() const {
+        return processed_raw_;
+    }
 };
 
 class CompressionWorker: public MainWorker {
@@ -81,6 +90,13 @@ class CompressionWorker: public MainWorker {
     uint32_t dict_size_;
     Mutex& arc_lock_;
     int do_work();
+
+    static int update_progress(void *p, UInt64 insize, UInt64 outsize) {
+        //CompressionWorker *worker = (CompressionWorker *)p;
+        //worker->processed_raw_ = insize;
+        return 0;
+    }
+
 public:
     CompressionWorker(Semaphore &sem, Mutex& arc_lock, int level, int dict_size) :
         MainWorker(sem),
@@ -94,6 +110,13 @@ public:
 
 class DecompressionWorker: public MainWorker {
     int do_work();
+
+    static int update_progress(void *p, UInt64 insize, UInt64 outsize) {
+        //DecompressionWorker *worker = (DecompressionWorker *)p;
+        //worker->processed_raw_ = outsize;
+        return 0;
+    }
+
 public:
     DecompressionWorker(Semaphore &sem) :
         MainWorker(sem)

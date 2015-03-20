@@ -85,7 +85,7 @@ static char *FileEntryToBuf(IterFileEntry it, char *buf)
     *buf++ = it->second.frags.size();
     for(size_t i = 0; i < it->second.frags.size(); i++) {
         buf = Put4(it->second.frags[i].bid, buf);
-        buf = Put4(it->second.frags[i].adler32, buf);
+        buf = Put4(it->second.frags[i].checksum, buf);
         buf = Put8(it->second.frags[i].posblock, buf);
         buf = Put8(it->second.frags[i].size, buf);
         buf = Put8(it->second.frags[i].posfile, buf);
@@ -107,7 +107,7 @@ static char *BufToFileEntry(string& filename, FileEntry& fe, char *buf)
     for(int i = 0; i < i1; i++) {
         FileEntry::Frag f;
         buf = Get4(f.bid, buf);
-        buf = Get4(f.adler32, buf);
+        buf = Get4(f.checksum, buf);
         buf = Get8(f.posblock, buf);
         buf = Get8(f.size, buf);
         buf = Get8(f.posfile, buf);

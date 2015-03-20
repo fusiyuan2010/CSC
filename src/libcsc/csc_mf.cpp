@@ -4,9 +4,13 @@
 #include <stdio.h>
 #include <csc_model.h>
 
+#ifdef _NO_PREFETCH_
+#define PREFETCH_T0(addr) 
+#else
 #include <emmintrin.h>
 #define PREFETCH_T0(addr) _mm_prefetch(((char *)(addr)),_MM_HINT_T0)
-#define PREFETCH_FETCH_DIST 32
+#endif
+
 
 #define HASH6(a, bits) (((*(uint32_t*)(a)^(*(uint16_t*)((a)+4)<<13))*2654435761u)>>(32-(bits)))
 
@@ -185,7 +189,7 @@ void MatchFinder::SlidePosFast(uint32_t wnd_pos, uint32_t len)
         uint32_t wpos = wnd_pos + i;
         if (pos_ >= 0xFFFFFFF0) normalize();
         h = HASH2(wnd_ + wpos);
-        if (h % 16 && h % 23) {
+        if (h % 16) {
             // for 'BAD' data, only a small subset of data will be test by MF
             i++;
             pos_++;
@@ -328,6 +332,34 @@ MAIN_MF:
     if (bt_head_) {
         dist = pos_ - bt_head_[hbt];
         uint32_t *l = &bt_nodes_[bt_pos_ * 2], *r = &bt_nodes_[bt_pos_ * 2 + 1];
+
+        for(; dist >= bt_size_ && dist < vld_rge_; ) {
+            // candidate in hash head of binary tree does not have match distance limit
+            uint32_t cmp_pos = wpos >= dist ? wpos - dist : wpos + wnd_size_ - dist;
+            uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
+            uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
+            if (minlen >= climit || pmatch[minlen] != pcur[minlen]) break;
+            while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
+                pmatch += 4; pcur += 4; }
+            if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
+                pmatch += 2; pcur += 2; }
+            if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+            uint32_t match_len = (pcur - wnd_) - wpos;
+            if (match_len > minlen) {
+                minlen = match_len;
+                if (match_len <= 6 && dist >= bound[match_len]) break;
+                ret[cnt].len = match_len;
+                ret[cnt].dist = 4 + dist;
+                if (cnt + 2 < MF_CAND_LIMIT)
+                    cnt++;
+                if (match_len >= good_len_) {
+                    dist = 0xFFFFFFFF; //disable all further find
+                    break;
+                }
+            }
+            break;
+        }
+
         uint32_t lenl = 0, lenr = 0;
         for(uint32_t cyc = 0; ; cyc++) {
             if (cyc >= bt_cyc_ || dist >= bt_size_ || dist >= vld_rge_) { *l = *r = 0; break; }
@@ -451,7 +483,7 @@ bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
     uint32_t dists[9] = {wnd_size_, wnd_size_};
     uint32_t depth = 0;
     uint32_t h = HASH2(src);
-    if (h % 16 && h % 23) 
+    if (h % 16) 
         // for 'BAD' data, only a small subset of data will be test by MF
         return false;
 

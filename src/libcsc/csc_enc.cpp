@@ -38,6 +38,7 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
         hbits = 23;
     else
         hbits = 24;
+    while(((uint32_t)1 << hbits) > dict_size) hbits--;
 
     if (dict_size <= 16 * MB) 
         p->bt_size = dict_size;
@@ -84,7 +85,7 @@ void CSCEncProps_Init(CSCProps *p, uint32_t dict_size, int level)
             p->good_len = 48;
             p->bt_cyc = 32;
             //p->bt_size = p->dict_size;
-            p->hash_width = 2;
+            p->hash_width = 0;
             break;
     }
 

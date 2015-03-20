@@ -13,7 +13,7 @@ LIBCSCOBJS=$(addprefix libcsc/, csc_analyzer.o csc_encoder_main.o csc_coder.o cs
 
 LIBCSCDECOBJS=$(addprefix libcsc/, csc_dec.o csc_memio.o csc_filters.o)
 
-CSARCOBJS=$(addprefix archiver/, csa_indexpack.o csa_worker.o csa_file.o csa_adler32.o csa_common.o)
+CSARCOBJS=$(addprefix archiver/, csa_indexpack.o csa_worker.o csa_file.o csa_adler32.o csa_common.o csa_progress.o)
  
 LIBOUTPUT=libcsc.a
 
