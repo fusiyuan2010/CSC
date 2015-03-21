@@ -423,6 +423,9 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
     }
 
     std::sort(tasks.begin(), tasks.end(), compareFuncByTaskSize);
+    for(uint32_t i = 0; i < tasks.size(); i++)
+        std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
+
     ProgressIndicator pi(tasks, (const MainWorker**)workers, mt_count_);
     pi.Run();
 
@@ -433,8 +436,6 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
                 uint32_t taskid = workertasks[j];
                 if (taskid < tasks.size())
                     tasks[taskid].finished = true;
-
-                std::sort(tasks[i].filelist.begin(), tasks[i].filelist.end(), compareFuncByPosblock);
                 abindex_[tasks[i].ab_id].filename = arcname_;
                 workers[j]->PutTask(tasks[i], abindex_[tasks[i].ab_id]);;
                 workertasks[j] = i;
@@ -473,7 +474,7 @@ int CSArc::Add()
 {
     {
         // check if file already exists
-        InputFile f;
+        OutputFile f;
         f.open(arcname_.c_str());
         if (f.isopen() && !overwrite_) {
             fprintf(stderr, "Archive %s already exists, use -f to force overwrite\n", arcname_.c_str());
@@ -828,7 +829,7 @@ bool CSArc::isselected(const char* filename) {
 int main(int argc, char *argv[])
 {
     CSArc csarc;
-    fprintf(stderr, "CSArc 3.3, experimential archiver by Siyuan Fu (https://github.com/fusiyuan2010)\n");
+    fprintf(stderr, "CSArc 3.3, experimential archiver by Siyuan Fu\n (https://github.com/fusiyuan2010)\n");
 
     if (argc < 3) {
         fprintf(stderr, "At least two arguments, command and archive name\n");
