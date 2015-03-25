@@ -28,7 +28,6 @@ public:
 
   bool open(const char* filename) {
     in=fopen(filename, "rb");
-    if (!in) perror(filename);
     return in!=0;
   }
 
@@ -162,9 +161,6 @@ public:
     std::wstring w=utow(filename, true);
     in=CreateFile(w.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
                   OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (in==INVALID_HANDLE_VALUE){
-        fprintf(stderr, "File open error %s\n", filename);
-    }
     return in!=INVALID_HANDLE_VALUE;
   }
 
@@ -231,7 +227,7 @@ public:
         FILE_SHARE_READ | FILE_SHARE_WRITE, 
         NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (out==INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "File open error %s\n", filename);
+        fprintf(stderr, "File open error %s\n", filename.c_str());
         DWORD x = GetLastError();
         printf("%d", x);
     } else {

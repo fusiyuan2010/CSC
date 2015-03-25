@@ -24,7 +24,7 @@ int CompressionWorker::do_work()
 {
     FileReader file_reader;
     file_reader.obj = new AsyncFileReader(task_->filelist, 
-            std::min<uint32_t>(32 * 1048576, task_->total_size));
+            std::min<uint64_t>(32 * 1048576, task_->total_size));
     file_reader.is.Read = file_read_proc;
 
     FileWriter file_writer;
@@ -32,7 +32,7 @@ int CompressionWorker::do_work()
     file_writer.os.Write = file_write_proc;
 
     CSCProps p;
-    CSCEncProps_Init(&p, std::min<uint32_t>(dict_size_, task_->total_size), level_);
+    CSCEncProps_Init(&p, std::min<uint64_t>(dict_size_, task_->total_size), level_);
     CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
     uint8_t buf[CSC_PROP_SIZE];
     CSCEnc_WriteProperties(&p, buf, 0);

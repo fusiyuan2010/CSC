@@ -60,7 +60,7 @@ class CSArc {
     void compress_index();
     void decompress_index();
     void compress_mt(vector<MainTask> &tasks);
-    void decompress_mt(vector<MainTask> &tasks);
+    int decompress_mt(vector<MainTask> &tasks);
 
 public:
     int Add();                
@@ -407,7 +407,7 @@ void CSArc::compress_mt(vector<MainTask> &tasks)
     pi.Finish();
 }
 
-void CSArc::decompress_mt(vector<MainTask> &tasks)
+int CSArc::decompress_mt(vector<MainTask> &tasks)
 {
     DecompressionWorker *workers[8];
     uint32_t workertasks[8];
@@ -467,14 +467,16 @@ void CSArc::decompress_mt(vector<MainTask> &tasks)
 
     if (decomp_ret < 0) {
         fprintf(stderr, "Extraction error, archive corrupted\n");
+        return -1;
     }
+    return 0;
 }
 
 int CSArc::Add()
 {
     {
         // check if file already exists
-        OutputFile f;
+        InputFile f;
         f.open(arcname_.c_str());
         if (f.isopen() && !overwrite_) {
             fprintf(stderr, "Archive %s already exists, use -f to force overwrite\n", arcname_.c_str());
@@ -598,7 +600,7 @@ int CSArc::check_header()
 int CSArc::Extract()
 {
     if (check_header() < 0)
-        return -1;
+        return 1;
     decompress_index();
 
     vector<MainTask> tasks;
@@ -644,8 +646,10 @@ int CSArc::Extract()
             f.close(it->second.edate, it->second.eattr);
         }
     }
-    decompress_mt(tasks);
-    return 0;
+    if (decompress_mt(tasks) < 0)
+        return -1;
+    else
+        return 0;
 }
 
 int CSArc::List()
@@ -697,8 +701,10 @@ int CSArc::Test()
                 task->push_back(DUMMY_FILENAME, ff.posfile, ff.size, ff.posblock, ff.checksum, it);
         }
     }
-    decompress_mt(tasks);
-    return 0;
+    if (decompress_mt(tasks) < 0)
+        return -1;
+    else
+        return 0;
 }
 
 // Return the part of fn up to the last slash
@@ -829,7 +835,7 @@ bool CSArc::isselected(const char* filename) {
 int main(int argc, char *argv[])
 {
     CSArc csarc;
-    fprintf(stderr, "CSArc 3.3, experimential archiver by Siyuan Fu\n (https://github.com/fusiyuan2010)\n");
+    fprintf(stderr, "CSArc 3.3, experimental archiver by Siyuan Fu\n (https://github.com/fusiyuan2010)\n");
 
     if (argc < 3) {
         fprintf(stderr, "At least two arguments, command and archive name\n");
@@ -844,18 +850,19 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    int ret = 0;
     switch(op) {
         case 'a':
-            csarc.Add();
+            ret = csarc.Add();
             break;
         case 't':
-            csarc.Test();
+            ret = csarc.Test();
             break;
         case 'l':
-            csarc.List();
+            ret = csarc.List();
             break;
         case 'x':
-            csarc.Extract();
+            ret = csarc.Extract();
             break;
         default:
             csarc.Usage();
@@ -863,7 +870,7 @@ int main(int argc, char *argv[])
             return 1;
     }
 
-    return 0;
+    return ret;
 }
 
 
