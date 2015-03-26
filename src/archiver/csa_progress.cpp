@@ -13,7 +13,7 @@ ThreadReturn ProgressIndicator::run()
     int k = 0;
     while(!finished_) {
         if (k == 0) {
-            uint32_t done_size = 0;
+            uint64_t done_size = 0;
             for(size_t i = 0; i < tasks_.size(); i++) {
                 if (!tasks_[i].finished) continue;
                 if (tasks_[i].filelist.rbegin()->posblock == 0)
