@@ -68,7 +68,7 @@ public:
     int List();               
     int Test();               
     void Usage();             
-    int ParseArg(int argc, char *argv[]);
+    int ParseArg(int argc, const char *argv[]);
 };
 
 bool compareFuncByPosblock(FileBlock a, FileBlock b) {
@@ -132,7 +132,7 @@ void CSArc::Usage()
     fprintf(stderr, "\tcsarc t out.csa *.dll\n");
 }
 
-int CSArc::ParseArg(int argc, char *argv[])
+int CSArc::ParseArg(int argc, const char *argv[])
 {
     int i = 0;
 
@@ -831,9 +831,20 @@ bool CSArc::isselected(const char* filename) {
   return matched;
 }
 
-
-int main(int argc, char *argv[])
-{
+#ifdef unix
+int main(int argc, const char** argv) {
+#else
+int main() {
+    int argc=0;
+    LPWSTR* argw=CommandLineToArgvW(GetCommandLine(), &argc);
+    vector<string> args(argc);
+    vector<const char *> argp(argc);
+    for (int i=0; i<argc; ++i) {
+        args[i]=wtou(argw[i]);
+        argp[i]=args[i].c_str();
+    }
+    const char** argv=&argp[0];
+#endif
     CSArc csarc;
     fprintf(stderr, "CSArc 3.3, experimental archiver by Siyuan Fu\n (https://github.com/fusiyuan2010)\n");
 

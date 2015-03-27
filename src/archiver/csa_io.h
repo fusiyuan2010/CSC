@@ -208,7 +208,7 @@ class AsyncFileReader : public AsyncReader {
 
     vector<FileBlock> &filelist_;
     size_t curfidx_;
-    size_t curfprog_;
+    uint64_t curfprog_;
     uint64_t cumsize_;
     InputFile if_;
 
