@@ -4,11 +4,13 @@
 #include <stdio.h>
 #include <csc_model.h>
 
-#ifdef _NO_PREFETCH_
-#define PREFETCH_T0(addr) 
+#if defined(__amd64__) || defined(_M_AMD64) || defined(__i386__) || defined(_M_IX86)
+#  include <emmintrin.h>
+#  define PREFETCH_T0(addr) _mm_prefetch(((char *)(addr)),_MM_HINT_T0)
+#elif defined(__GNUC__) && ((__GNUC__ > 3) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 2)))
+#  define PREFETCH_T0(addr) __builtin_prefetch(addr)
 #else
-#include <emmintrin.h>
-#define PREFETCH_T0(addr) _mm_prefetch(((char *)(addr)),_MM_HINT_T0)
+#  define PREFETCH_T0(addr)
 #endif
 
 
