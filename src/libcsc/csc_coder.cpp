@@ -85,7 +85,7 @@ void Coder::EncDirect16(uint32_t val,uint32_t len)
 
 void Coder::RC_ShiftLow(void)
 {
-    static uint8_t temp;
+    uint8_t temp;
     if ((uint32_t)rc_low_ < (uint32_t)0xFF000000 || (int32_t)(rc_low_ >> 32) != 0)
     {
         temp = rc_cache_;
