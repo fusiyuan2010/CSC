@@ -142,6 +142,7 @@ int CSArc::ParseArg(int argc, const char *argv[])
     split_count_ = 1;
     verbose_ = false;
     overwrite_ = false;
+    recurse_ = false;
 
     to_dir_ = "./";
     for(; i < argc; i++)

@@ -118,7 +118,6 @@ void MatchFinder::SlidePos(uint32_t wnd_pos, uint32_t len, uint32_t limit)
         if (pos_ >= 0xFFFFFFF0) normalize();
         h2 = HASH2(wnd_ + wpos);
         h3 = HASH3(wnd_ + wpos);
-        hbt = HASH6(wnd_ + wpos, bt_bits_);
         ht2_[h2] = pos_;
         ht3_[h3] = pos_;
 
@@ -137,6 +136,7 @@ void MatchFinder::SlidePos(uint32_t wnd_pos, uint32_t len, uint32_t limit)
         }
 
         if (!bt_head_) { pos_++; i++; continue; }
+        hbt = HASH6(wnd_ + wpos, bt_bits_);
         if (bt_pos_ >= bt_size_) bt_pos_ -= bt_size_;
         uint32_t dist = pos_ - bt_head_[hbt];
         uint32_t *l = &bt_nodes_[bt_pos_ * 2], *r = &bt_nodes_[bt_pos_ * 2 + 1];
@@ -224,14 +224,18 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
     static const uint32_t bound[] = {0, 0, 64, 1024, 16 * KB, 256 * KB, 4 * MB};
     uint32_t h2 = HASH2(wnd_ + wpos);
     uint32_t h3 = HASH3(wnd_ + wpos);
-    uint32_t h6 = HASH6(wnd_ + wpos, ht_bits_);
-    uint32_t hbt = HASH6(wnd_ + wpos, bt_bits_);
+    uint32_t h6 = 0; 
+    uint32_t hbt = 0;
     uint32_t minlen = 1, cnt = 0, dist = 0;
-    if (ht_width_) 
+    if (ht_width_) {
+        h6 = HASH6(wnd_ + wpos, ht_bits_);
         PREFETCH_T0(ht6_ + h6 * ht_width_);
+    }
 
-    if (bt_head_)
+    if (bt_head_) {
+        hbt = HASH6(wnd_ + wpos, bt_bits_);
         PREFETCH_T0(bt_head_ + hbt);
+    }
 
     if (ht_low_) {
         PREFETCH_T0(ht2_ + h2);
