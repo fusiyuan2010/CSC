@@ -14,16 +14,32 @@
 #endif
 
 
+/*
 #define HASH6(a, bits) (((*(uint32_t*)(a)^(*(uint16_t*)((a)+4)<<13))*2654435761u)>>(32-(bits)))
-
-//#define HASH5(a) (((*(uint32_t*)(a)^(*(uint16_t*)((a)+3)<<13))*2654435761u)>>(32-21))
-
-#define HASH4(a, bits) (((*(uint32_t*)(a))*2654435761u)>>(32-bits))
-
 #define HASH3(a) ((*(a)<<8)^(*((a)+1)<<5)^(*((a)+2)))
 #define HASH2(a) ((*(uint16_t*)(a) * 2654435761u) & 0x3FFF)
+*/
 
+inline uint32_t HASH2(uint8_t *p) 
+{
+    uint16_t v = 0;
+    memcpy(&v, p, 2);
+    return (v * 65521u) & 0x3FFF; 
+}
 
+inline uint32_t HASH3(uint8_t *p) 
+{
+    return (*(p) << 8) ^ (*(p + 1) << 5) ^ *(p + 2);
+}
+
+inline uint32_t HASH6(uint8_t *p, uint32_t bits) 
+{
+    uint32_t v = 0;
+    uint16_t v2 = 0;
+    memcpy(&v, p, 4);
+    memcpy(&v2, p + 4, 2);
+    return (((v ^ ((uint32_t)v2 << 13)) * 2654435761u) >> (32 - bits));
+}
 
 
 int MatchFinder::Init(uint8_t *wnd, 
@@ -248,11 +264,14 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
         uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
         uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
         if (minlen >= climit || pmatch[minlen] != pcur[minlen]) continue;
+        /* avoid alignment warning)
         while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
             pmatch += 4; pcur += 4; }
         if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        */
+        while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
         uint32_t match_len = (pcur - wnd_) - wpos;
         if (match_len && i == 0) {
             // rep0len1
@@ -283,11 +302,14 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
         uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
         uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
         if (minlen >= climit || pmatch[minlen] != pcur[minlen]) break;
+        /* avoid alignment warning)
         while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
             pmatch += 4; pcur += 4; }
         if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        */
+        while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
         uint32_t match_len = (pcur - wnd_) - wpos;
         if (match_len > minlen) {
             minlen = match_len;
@@ -311,11 +333,15 @@ uint32_t MatchFinder::find_match(MFUnit *ret, uint32_t *rep_dist, uint32_t wpos,
         uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
         uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
         if (minlen >= climit || pmatch[minlen] != pcur[minlen]) break;
+        /* avoid alignment warning)
         while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
             pmatch += 4; pcur += 4; }
         if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        */
+        while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+
         uint32_t match_len = (pcur - wnd_) - wpos;
         if (match_len > minlen) {
             minlen = match_len;
@@ -345,11 +371,15 @@ MAIN_MF:
             uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
             uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
             if (minlen >= climit || pmatch[minlen] != pcur[minlen]) break;
+            /* avoid alignment warning)
             while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
                 pmatch += 4; pcur += 4; }
             if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
                 pmatch += 2; pcur += 2; }
             if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+            */
+            while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+
             uint32_t match_len = (pcur - wnd_) - wpos;
             if (match_len > minlen) {
                 minlen = match_len;
@@ -425,11 +455,15 @@ MAIN_MF:
         uint32_t climit = MIN(limit, wnd_size_ - cmp_pos);
         uint8_t *pcur = wnd_ + wpos, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
         if (minlen >= climit || pmatch[minlen] != pcur[minlen]) continue;
+        /* avoid alignment warning)
         while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
             pmatch += 4; pcur += 4; }
         if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        */
+        while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+
         uint32_t match_len = (pcur - wnd_) - wpos;
         if (match_len > minlen) {
             minlen = match_len;
@@ -512,11 +546,15 @@ bool MatchFinder::TestFind(uint32_t wpos, uint8_t *src, uint32_t limit)
         climit = MIN(limit, wnd_size_ - cmp_pos);
         uint8_t *pcur = src, *pmatch = wnd_ + cmp_pos, *pend = pmatch + climit;
 
+        /* avoid alignment warning)
         while(pmatch + 4 <= pend && *(uint32_t *)pcur == *(uint32_t *)pmatch) {
             pmatch += 4; pcur += 4; }
         if (pmatch + 2 <= pend && *(uint16_t *)pcur == *(uint16_t *)pmatch) {
             pmatch += 2; pcur += 2; }
         if (pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+        */
+        while(pmatch < pend && *pcur == *pmatch) { pmatch++; pcur++; }
+
         if (pcur - src > 18)
             // enough long match
             return true;
