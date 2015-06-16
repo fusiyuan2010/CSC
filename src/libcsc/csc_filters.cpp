@@ -291,7 +291,7 @@ uint32_t Filters::Foward_Dict(uint8_t *src,uint32_t size)
 			for(j=0;;)
 			{
 				idx=src[i+j]-'a';
-				if (idx<0 || idx>25)
+				if (idx>25)
 					break;
 				if (wordTree[treePos].next[idx]==0)
 					break;
