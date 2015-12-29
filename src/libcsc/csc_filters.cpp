@@ -357,8 +357,9 @@ void Filters::Inverse_Dict(uint8_t *src,uint32_t size)
 {
 
 	if (m_fltSwapSize<size) {
-		if (m_fltSwapSize>0)
+		if (m_fltSwapSize > 0) {
 			free(m_fltSwapBuf);
+        }
 
 		m_fltSwapBuf = (uint8_t*)malloc(size);
 		m_fltSwapSize = size;
@@ -368,16 +369,18 @@ void Filters::Inverse_Dict(uint8_t *src,uint32_t size)
 	uint32_t i=0,j;
 	uint32_t dstPos=0,idx;
 
-	while(dstPos<size) {
-		if (src[i]>=0x82 && src[i]<maxSymbol) {
-			idx=wordIndex[src[i]];
-			for(j=0;wordList[idx][j];j++)
-				dst[dstPos++]=wordList[idx][j];
-		} else if (src[i]==254 && (i+1<size && src[i+1]>=0x82)) { // && src[i+1]<maxSymbol))
+	while(dstPos < size) {
+		if (src[i] >= 0x82 && src[i] < maxSymbol) {
+			idx = wordIndex[src[i]];
+			for(j = 0; wordList[idx][j] && dstPos < size; j++) {
+				dst[dstPos++] = wordList[idx][j];
+            }
+		} else if (src[i] == 254 && (i + 1 < size && src[i+1] >= 0x82)) { // && src[i+1]<maxSymbol))
 			i++;
-			dst[dstPos++]=src[i];
-		} else 
-			dst[dstPos++]=src[i];
+			dst[dstPos++] = src[i];
+		} else {
+			dst[dstPos++] = src[i];
+        }
 		i++;
 	}
 	memcpy(src, dst, size);

@@ -2,7 +2,7 @@
 
 OPT=-O4
 #OPT=-Os
-DEBUG=-g -DDEBUG #-D_HAVE_PROFILER_
+#DEBUG=-g -DDEBUG -fsanitize=undefined #-D_HAVE_PROFILER_
 
 CFLAGS=-Wall -Wno-format -fPIC $(OPT) $(DEBUG) $(TEST) -D_7Z_TYPES_
 
@@ -35,6 +35,6 @@ $(LIBOUTPUT): $(LIBCSCOBJS)
 	$(CC) $(INCLUDE_PATH) -c $(CFLAGS) -o $@ $^
 
 clean:
-	rm -f archiver/*.o $(LIBOUTPUT) csc decomp csarc
+	rm -f $(CSARCOBJS) $(LIBCSCDECOBJS) $(LIBOUTPUT) $(LIBCSCOBJS) csc decomp csarc
 
 rebuild: clean all

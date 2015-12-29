@@ -40,6 +40,11 @@ int MemIO::ReadBlock(uint8_t *buffer, uint32_t &size, int rc1bc0)
                     + size_bytes[2];
             }
 
+            if (!cur_bsize || cur_bsize > bsize_) {
+                // must be a abnormal stream
+                return -1;
+            }
+
             iosize = size = (int)cur_bsize;
             if (((fb >> 7) & 0x1) == rc1bc0) {
                 // this is the block to read out

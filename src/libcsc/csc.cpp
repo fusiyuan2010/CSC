@@ -32,7 +32,7 @@ size_t stdio_write(void *p, const void *buf, size_t size)
 int show_progress(void *p, UInt64 insize, UInt64 outsize)
 {
     (void)p;
-    printf("\r%llu -> %llu\t\t\t\t", insize, outsize);
+    fprintf(stderr, "\r%llu -> %llu\t\t\t\t", insize, outsize);
     fflush(stdout);
     return 0;
 }
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
                 ShowUsage(argv[0]);
         }
 
-        printf("Estimated memory usage: %llu MB\n", CSCEnc_EstMemUsage(&p) / 1048576ull);
+        fprintf(stderr, "Estimated memory usage: %llu MB\n", CSCEnc_EstMemUsage(&p) / 1048576ull);
         unsigned char buf[CSC_PROP_SIZE];
         CSCEnc_WriteProperties(&p, buf, 0);
         (void)(fwrite(buf, 1, CSC_PROP_SIZE, fout) + 1);
@@ -155,6 +155,10 @@ int main(int argc, char *argv[])
         (void)(fread(buf, 1, CSC_PROP_SIZE, fin) + 1);
         CSCDec_ReadProperties(&p, buf);
         CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&isss);
+        if (!h) {
+            printf("Invalid csc compressed file\n");
+            return 1;
+        }
         CSCDec_Decode(h, (ISeqOutStream*)&osss, &prog);
         CSCDec_Destroy(h);
     }
