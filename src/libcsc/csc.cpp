@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
         unsigned char buf[CSC_PROP_SIZE];
         CSCEnc_WriteProperties(&p, buf, 0);
         (void)(fwrite(buf, 1, CSC_PROP_SIZE, fout) + 1);
-        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&osss);
+        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&osss, NULL);
         CSCEnc_Encode(h, (ISeqInStream*)&isss, &prog);
         CSCEnc_Encode_Flush(h);
         CSCEnc_Destroy(h);
@@ -154,7 +154,7 @@ int main(int argc, char *argv[])
         unsigned char buf[CSC_PROP_SIZE];
         (void)(fread(buf, 1, CSC_PROP_SIZE, fin) + 1);
         CSCDec_ReadProperties(&p, buf);
-        CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&isss);
+        CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&isss, NULL);
         if (!h) {
             printf("Invalid csc compressed file\n");
             return 1;

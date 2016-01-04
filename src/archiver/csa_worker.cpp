@@ -33,7 +33,7 @@ int CompressionWorker::do_work()
 
     CSCProps p;
     CSCEncProps_Init(&p, std::min<uint64_t>(dict_size_, task_->total_size), level_);
-    CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
+    CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer, NULL);
     uint8_t buf[CSC_PROP_SIZE];
     CSCEnc_WriteProperties(&p, buf, 0);
 
@@ -78,7 +78,7 @@ int DecompressionWorker::do_work()
     size_t prop_size = CSC_PROP_SIZE; 
     file_reader.obj->Read(buf, &prop_size);
     CSCDec_ReadProperties(&p, buf);
-    CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader);
+    CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&file_reader, NULL);
     int ret = CSCDec_Decode(h, (ISeqOutStream*)&file_writer, (ICompressProgress*)&prog);
     CSCDec_Destroy(h);
 

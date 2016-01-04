@@ -250,7 +250,7 @@ void CSArc::compress_index()
     {
         CSCProps p;
         CSCEncProps_Init(&p, 256 * 1024, 2);
-        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer);
+        CSCEncHandle h = CSCEnc_Create(&p, (ISeqOutStream*)&file_writer, NULL);
         uint8_t buf[CSC_PROP_SIZE];
         CSCEnc_WriteProperties(&p, buf, 0);
 
@@ -320,7 +320,7 @@ void CSArc::decompress_index()
 
     CSCProps p;
     CSCDec_ReadProperties(&p, (uint8_t*)reader.ptr);
-    CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&reader);
+    CSCDecHandle h = CSCDec_Create(&p, (ISeqInStream*)&reader, NULL);
     CSCDec_Decode(h, (ISeqOutStream*)&writer, NULL);
     CSCDec_Destroy(h);
 

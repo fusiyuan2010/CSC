@@ -47,7 +47,8 @@ int MatchFinder::Init(uint8_t *wnd,
         uint32_t bt_size, 
         uint32_t bt_bits, 
         uint32_t ht_width,
-        uint32_t ht_bits
+        uint32_t ht_bits,
+        ISzAlloc *alloc
         )
 {
     wnd_ = wnd;
@@ -60,6 +61,7 @@ int MatchFinder::Init(uint8_t *wnd,
     ht_width_ = ht_width;
     bt_bits_ = bt_bits;
     bt_size_ = bt_size;
+    alloc_ = alloc;
 
     if (!bt_bits_ || !bt_size_) 
         bt_bits_ = bt_size_ = 0;
@@ -72,7 +74,7 @@ int MatchFinder::Init(uint8_t *wnd,
         size_ += (uint64_t)bt_size_ * 2;
     }
 
-    mfbuf_raw_ = (uint32_t *)malloc(sizeof(uint32_t) * size_ + 128);
+    mfbuf_raw_ = (uint32_t *)alloc_->Alloc(alloc_, sizeof(uint32_t) * size_ + 128);
     if (!mfbuf_raw_)
         return -1;
     mfbuf_ = (uint32_t*)((uint8_t *)mfbuf_raw_ + (64 - ((uint64_t)(mfbuf_raw_) & 0x3F)));
@@ -110,7 +112,7 @@ void MatchFinder::normalize()
 
 void MatchFinder::Destroy()
 {
-    free(mfbuf_raw_);
+    alloc_->Free(alloc_, mfbuf_raw_);
 }
 
 void MatchFinder::SetArg(int bt_cyc, int ht_cyc, int ht_low, int good_len)

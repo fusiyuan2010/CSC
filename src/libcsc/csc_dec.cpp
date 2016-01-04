@@ -2,6 +2,7 @@
 #include <csc_memio.h>
 #include <csc_filters.h>
 #include <csc_typedef.h>
+#include <csc_default_alloc.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -112,7 +113,7 @@ class CSCDecoder
         uint32_t *p=NULL;
 
         if (p_delta_ == NULL) {
-            p_delta_ = (uint32_t*)malloc(256*256*sizeof(uint32_t));
+            p_delta_ = (uint32_t*)alloc_->Alloc(alloc_, 256*256*sizeof(uint32_t));
             for (i = 0;i< 256 * 256;i++)
                 p_delta_[i]=2048;
         }
@@ -305,8 +306,10 @@ class CSCDecoder
 
 
 public:
-    int Init(MemIO *io, uint32_t dict_size, uint32_t csc_blocksize) {
+    int Init(MemIO *io, uint32_t dict_size, uint32_t csc_blocksize, ISzAlloc *alloc) {
         io_ = io;
+        alloc_ = alloc;
+
         // entropy coder init
         rc_low_ = 0;
         rc_range_ = 0xFFFFFFFF;
@@ -325,8 +328,8 @@ public:
         p_lit_ = NULL;
         filters_ = NULL;
 
-        prc_ = rc_buf_ = (uint8_t *)malloc(csc_blocksize);
-        pbc_ = bc_buf_ = (uint8_t *)malloc(csc_blocksize);
+        prc_ = rc_buf_ = (uint8_t *)alloc_->Alloc(alloc_, csc_blocksize);
+        pbc_ = bc_buf_ = (uint8_t *)alloc_->Alloc(alloc_, csc_blocksize);
         if (!prc_ || !pbc_)
             goto FREE_ON_ERROR;
 
@@ -342,12 +345,12 @@ public:
         rc_size_ += 5;
 
         // model
-        p_lit_ = (uint32_t*)malloc(256 * 256 * sizeof(uint32_t));
+        p_lit_ = (uint32_t*)alloc_->Alloc(alloc_, 256 * 256 * sizeof(uint32_t));
         if (!p_lit_)
             goto FREE_ON_ERROR;
 
-        filters_ = new Filters();
-        filters_->Init();
+        filters_ = (Filters *)alloc_->Alloc(alloc_, sizeof(Filters));
+        filters_->Init(alloc_);
 
 #define INIT_PROB(P, K) do{for(int i = 0; i < K; i++) P[i] = 2048;}while(0)
         INIT_PROB(p_state_, 64 * 3);
@@ -370,7 +373,7 @@ public:
 
         // LZ engine
         wnd_size_ = dict_size;
-        wnd_ = (uint8_t *)malloc(wnd_size_ + 8);
+        wnd_ = (uint8_t *)alloc_->Alloc(alloc_, wnd_size_ + 8);
         if (!wnd_)
             goto FREE_ON_ERROR;
 
@@ -388,14 +391,14 @@ FREE_ON_ERROR:
 
     void Destroy()
     {
-        free(p_lit_);
-        free(p_delta_);
-        free(wnd_);
-        free(rc_buf_);
-        free(bc_buf_);
+        alloc_->Free(alloc_, p_lit_);
+        alloc_->Free(alloc_, p_delta_);
+        alloc_->Free(alloc_, wnd_);
+        alloc_->Free(alloc_, rc_buf_);
+        alloc_->Free(alloc_, bc_buf_);
         if (filters_) {
             filters_->Destroy();
-            delete filters_;
+            alloc_->Free(alloc_, filters_);
         }
         p_lit_ = p_delta_ = NULL;
         wnd_ = NULL;
@@ -409,6 +412,7 @@ FREE_ON_ERROR:
     }
 
 private:
+    ISzAlloc *alloc_;
     MemIO *io_;
     Filters *filters_;
 
@@ -681,23 +685,30 @@ struct CSCInstance
 {
     CSCDecoder *decoder;
     MemIO *io;
+    ISzAlloc *alloc;
     uint32_t raw_blocksize;
 };
 
-CSCDecHandle CSCDec_Create(const CSCProps *props, ISeqInStream *instream)
+CSCDecHandle CSCDec_Create(const CSCProps *props,
+                           ISeqInStream *instream,
+                           ISzAlloc *alloc)
 {
+    if (alloc == NULL) {
+        alloc = default_alloc;
+    }
+
     if (props->dict_size > 1024 * MB) {
         return NULL;
     }
 
-    CSCInstance *csc = new CSCInstance();
-    csc->io = new MemIO();
-    csc->io->Init(instream, props->csc_blocksize);
+    CSCInstance *csc = (CSCInstance *)alloc->Alloc(alloc, sizeof(CSCInstance));
+    csc->io = (MemIO *)alloc->Alloc(alloc, sizeof(MemIO));
+    csc->io->Init(instream, props->csc_blocksize, alloc);
     csc->raw_blocksize = props->raw_blocksize;
+    csc->decoder = (CSCDecoder *)alloc->Alloc(alloc, sizeof(CSCDecoder));
+    csc->alloc = alloc;
 
-    csc->decoder = new CSCDecoder();
-
-    if (csc->decoder->Init(csc->io, props->dict_size, props->csc_blocksize) < 0) {
+    if (csc->decoder->Init(csc->io, props->dict_size, props->csc_blocksize, alloc) < 0) {
         CSCDec_Destroy((void *)csc);
         return NULL;
     }
@@ -708,9 +719,10 @@ void CSCDec_Destroy(CSCDecHandle p)
 {
     CSCInstance *csc = (CSCInstance *)p;
     csc->decoder->Destroy();
-    delete csc->decoder;
-    delete csc->io;
-    delete csc;
+    ISzAlloc *alloc = csc->alloc;
+    alloc->Free(alloc, csc->decoder);
+    alloc->Free(alloc, csc->io);
+    alloc->Free(alloc, csc);
 }
 
 void CSCDec_ReadProperties(CSCProps *props, uint8_t *s)
@@ -726,7 +738,7 @@ int CSCDec_Decode(CSCDecHandle p,
 {
     int ret = 0;
     CSCInstance *csc = (CSCInstance *)p;
-    uint8_t *buf = new uint8_t[csc->raw_blocksize];
+    uint8_t *buf = (uint8_t *)csc->alloc->Alloc(csc->alloc, csc->raw_blocksize);
     uint64_t outsize = 0;
 
     for(;;) {
@@ -755,7 +767,7 @@ int CSCDec_Decode(CSCDecHandle p,
             break;
         }
     }
-    delete []buf;
+    csc->alloc->Free(csc->alloc, buf);
     return ret;
 }
 

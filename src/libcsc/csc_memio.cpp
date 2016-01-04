@@ -12,7 +12,7 @@ int MemIO::ReadBlock(uint8_t *buffer, uint32_t &size, int rc1bc0)
         size = (*blist)->size;
         memcpy(buffer, (*blist)->buf, size);
         DataBlock *tb = (*blist)->next;
-        free(*blist);
+        alloc_->Free(alloc_, *blist);
         (*blist) = tb;
     } else {
         // read fresh, if meet the other kind of block, keep it in its buffer
@@ -55,12 +55,12 @@ int MemIO::ReadBlock(uint8_t *buffer, uint32_t &size, int rc1bc0)
             } else {
                 // other kind of block, append it to list
                 // keep looping until meet the block it wants
-                DataBlock *newblock = (DataBlock *)malloc(sizeof(*newblock) + cur_bsize);
+                DataBlock *newblock = (DataBlock *)alloc_->Alloc(alloc_, sizeof(*newblock) + cur_bsize);
                 newblock->size = cur_bsize;
                 newblock->next = NULL;
                 is_->Read(is_, newblock->buf, &iosize);
                 if (iosize != cur_bsize) {
-                    free(newblock);
+                    alloc_->Free(alloc_, newblock);
                     return -1;
                 }
 
@@ -106,12 +106,13 @@ int MemIO::WriteBlock(uint8_t *buffer, uint32_t size, int rc1bc0)
     return size;
 }
 
-void MemIO::Init(void *iostream, uint32_t bsize)
+void MemIO::Init(void *iostream, uint32_t bsize, ISzAlloc *alloc)
 {
     ios_ = iostream;
     bsize_ = bsize;
     rc_blocks_ = NULL;
     bc_blocks_ = NULL;
+    alloc_ = alloc;
 }
 
 

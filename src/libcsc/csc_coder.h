@@ -15,10 +15,11 @@
 class Coder
 {
     MemIO *io_;
+    ISzAlloc *alloc_;
 
 public:
 
-    int Init(MemIO *io);
+    int Init(MemIO *io, ISzAlloc *alloc);
     void Destroy();
 
     //flush the coder

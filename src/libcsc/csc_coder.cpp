@@ -3,8 +3,9 @@
 #include <stdlib.h>
 
 
-int Coder::Init(MemIO *io)
+int Coder::Init(MemIO *io, ISzAlloc *alloc)
 {
+    alloc_ = alloc;
     rc_low_ = 0;
     rc_range_ = 0xFFFFFFFF;
     rc_cachesize_ = 1;
@@ -18,22 +19,22 @@ int Coder::Init(MemIO *io)
 
     io_ = io;
     rc_bufsize_ = bc_bufsize_ = io->GetBlockSize();
-    prc_ = rc_buf_ = (uint8_t *)malloc(rc_bufsize_);
-    pbc_ = bc_buf_ = (uint8_t *)malloc(bc_bufsize_);
+    prc_ = rc_buf_ = (uint8_t *)alloc_->Alloc(alloc_, rc_bufsize_);
+    pbc_ = bc_buf_ = (uint8_t *)alloc_->Alloc(alloc_, bc_bufsize_);
 
-    if (rc_buf_ && bc_buf_) 
+    if (rc_buf_ && bc_buf_) {
         return 0;
-    else {
-        free(rc_buf_);
-        free(bc_buf_);
+    } else {
+        alloc_->Free(alloc_, rc_buf_);
+        alloc_->Free(alloc_, bc_buf_);
         return -1;
     }
 }
 
 void Coder::Destroy()
 {
-    free(rc_buf_);
-    free(bc_buf_);
+    alloc_->Free(alloc_, rc_buf_);
+    alloc_->Free(alloc_, bc_buf_);
 }
 
 void Coder::Flush()
