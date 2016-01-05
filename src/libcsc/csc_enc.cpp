@@ -5,7 +5,7 @@
 #include <csc_default_alloc.h>
 #include <stdlib.h>
 
-struct CSCInstance
+struct CSCEncInstance
 {
     CSCEncoder *encoder;
     MemIO *io;
@@ -118,7 +118,7 @@ CSCEncHandle CSCEnc_Create(const CSCProps *props,
     if (alloc == NULL) {
         alloc = default_alloc;
     }
-    CSCInstance *csc = (CSCInstance *)alloc->Alloc(alloc, sizeof(CSCInstance));
+    CSCEncInstance *csc = (CSCEncInstance *)alloc->Alloc(alloc, sizeof(CSCEncInstance));
 
     csc->io = (MemIO *)alloc->Alloc(alloc, sizeof(MemIO));
     csc->io->Init(outstream, props->csc_blocksize, alloc);
@@ -134,7 +134,7 @@ CSCEncHandle CSCEnc_Create(const CSCProps *props,
 
 void CSCEnc_Destroy(CSCEncHandle p)
 {
-    CSCInstance *csc = (CSCInstance *)p;
+    CSCEncInstance *csc = (CSCEncInstance *)p;
     csc->encoder->Destroy();
     ISzAlloc *alloc = csc->alloc;
     alloc->Free(alloc, csc->encoder);
@@ -162,7 +162,7 @@ int CSCEnc_Encode(CSCEncHandle p,
         ICompressProgress *progress)
 {
     int ret = 0;
-    CSCInstance *csc = (CSCInstance *)p;
+    CSCEncInstance *csc = (CSCEncInstance *)p;
     uint8_t *buf = (uint8_t *)csc->alloc->Alloc(csc->alloc, csc->raw_blocksize);
     uint64_t insize = 0;
 
@@ -191,7 +191,7 @@ int CSCEnc_Encode(CSCEncHandle p,
 
 int CSCEnc_Encode_Flush(CSCEncHandle p)
 {
-    CSCInstance *csc = (CSCInstance *)p;
+    CSCEncInstance *csc = (CSCEncInstance *)p;
     csc->encoder->WriteEOF();
     csc->encoder->Flush();
     return 0;

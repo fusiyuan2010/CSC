@@ -681,7 +681,7 @@ int CSCDecoder::Decompress(uint8_t *dst, uint32_t *size, uint32_t max_bsize)
     return ret;
 }
 
-struct CSCInstance
+struct CSCDecInstance
 {
     CSCDecoder *decoder;
     MemIO *io;
@@ -701,7 +701,7 @@ CSCDecHandle CSCDec_Create(const CSCProps *props,
         return NULL;
     }
 
-    CSCInstance *csc = (CSCInstance *)alloc->Alloc(alloc, sizeof(CSCInstance));
+    CSCDecInstance *csc = (CSCDecInstance *)alloc->Alloc(alloc, sizeof(CSCDecInstance));
     csc->io = (MemIO *)alloc->Alloc(alloc, sizeof(MemIO));
     csc->io->Init(instream, props->csc_blocksize, alloc);
     csc->raw_blocksize = props->raw_blocksize;
@@ -717,7 +717,7 @@ CSCDecHandle CSCDec_Create(const CSCProps *props,
 
 void CSCDec_Destroy(CSCDecHandle p)
 {
-    CSCInstance *csc = (CSCInstance *)p;
+    CSCDecInstance *csc = (CSCDecInstance *)p;
     csc->decoder->Destroy();
     ISzAlloc *alloc = csc->alloc;
     alloc->Free(alloc, csc->decoder);
@@ -737,7 +737,7 @@ int CSCDec_Decode(CSCDecHandle p,
         ICompressProgress *progress)
 {
     int ret = 0;
-    CSCInstance *csc = (CSCInstance *)p;
+    CSCDecInstance *csc = (CSCDecInstance *)p;
     uint8_t *buf = (uint8_t *)csc->alloc->Alloc(csc->alloc, csc->raw_blocksize);
     uint64_t outsize = 0;
 
