@@ -193,7 +193,5 @@ int CSCEnc_Encode_Flush(CSCEncHandle p)
 {
     CSCInstance *csc = (CSCInstance *)p;
     csc->encoder->WriteEOF();
-    csc->encoder->Flush();
-    return 0;
+    return csc->encoder->Flush();
 }
-

@@ -23,7 +23,7 @@ public:
     void Destroy();
 
     //flush the coder
-    void Flush();    
+    int Flush();
 
     //Get coded length
     uint32_t GetCodedLength(void) {
