@@ -37,7 +37,7 @@ void Coder::Destroy()
     alloc_->Free(alloc_, bc_buf_);
 }
 
-void Coder::Flush()
+int Coder::Flush()
 {
     for (int i=0;i<5;i++) // One more byte for EOF
     {
@@ -57,8 +57,10 @@ void Coder::Flush()
     }
 
     outsize_ += rc_size_ + bc_size_;
-    io_->WriteRCData(rc_buf_,rc_size_);
-    io_->WriteBCData(bc_buf_,bc_size_);
+    if (io_->WriteRCData(rc_buf_,rc_size_) != (int) rc_size_)
+        return WRITE_ERROR;
+    if (io_->WriteBCData(bc_buf_,bc_size_) != (int) bc_size_)
+        return WRITE_ERROR;
 
     rc_low_ = 0;
     rc_range_ = 0xFFFFFFFF;
@@ -69,6 +71,8 @@ void Coder::Flush()
     bc_curbits_ = bc_curval_ = 0;
     prc_ = rc_buf_;
     pbc_ = bc_buf_;
+
+    return 0;
 }
 
 void Coder::EncDirect16(uint32_t val,uint32_t len)
@@ -109,4 +113,3 @@ void Coder::RC_ShiftLow(void)
     rc_cachesize_++;
     rc_low_ = (uint32_t)rc_low_ << 8;
 }
-

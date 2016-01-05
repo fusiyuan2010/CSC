@@ -146,9 +146,9 @@ void CSCEncoder::Compress(uint8_t *src,uint32_t size)
 }
 
 
-void CSCEncoder::Flush()
+int CSCEncoder::Flush()
 {
-    coder_.Flush();
+    return coder_.Flush();
 }
 
 void CSCEncoder::WriteEOF()

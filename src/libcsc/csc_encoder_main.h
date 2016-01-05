@@ -13,12 +13,12 @@ class CSCEncoder
 {
 public:
     int Init(const CSCProps *p, MemIO *io, ISzAlloc *alloc);
-    
+
 
     void WriteEOF();
     //Should be called when finished compression of one part.
 
-    void Flush();
+    int Flush();
     //Should be called when finished the whole compression.
 
     void Destroy();
