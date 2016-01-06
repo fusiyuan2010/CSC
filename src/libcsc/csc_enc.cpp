@@ -179,8 +179,9 @@ int CSCEnc_Encode(CSCEncHandle p,
             }
             if (progress)
                 progress->Progress(progress, insize, csc->encoder->GetCompressedSize());
-        } else if (ret < 0)
+        } else if (ret < 0) {
             ret = READ_ERROR;
+        }
 
         if (ret < 0 || size == 0)
             break;
@@ -192,8 +193,12 @@ int CSCEnc_Encode(CSCEncHandle p,
 int CSCEnc_Encode_Flush(CSCEncHandle p)
 {
     CSCEncInstance *csc = (CSCEncInstance *)p;
-    csc->encoder->WriteEOF();
-    csc->encoder->Flush();
+    try {
+        csc->encoder->WriteEOF();
+        csc->encoder->Flush();
+    } catch (int errcode) {
+        return errcode;
+    }
     return 0;
 }
 

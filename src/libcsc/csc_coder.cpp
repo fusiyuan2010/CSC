@@ -57,8 +57,10 @@ void Coder::Flush()
     }
 
     outsize_ += rc_size_ + bc_size_;
-    io_->WriteRCData(rc_buf_,rc_size_);
-    io_->WriteBCData(bc_buf_,bc_size_);
+    if (io_->WriteRCData(rc_buf_, rc_size_) != (int)rc_size_
+        || io_->WriteBCData(bc_buf_, bc_size_) != (int)bc_size_) {
+        throw (int)WRITE_ERROR;
+    }
 
     rc_low_ = 0;
     rc_range_ = 0xFFFFFFFF;
@@ -87,17 +89,16 @@ void Coder::EncDirect16(uint32_t val,uint32_t len)
 void Coder::RC_ShiftLow(void)
 {
     uint8_t temp;
-    if ((uint32_t)rc_low_ < (uint32_t)0xFF000000 || (int32_t)(rc_low_ >> 32) != 0)
-    {
+    if ((uint32_t)rc_low_ < (uint32_t)0xFF000000 || (int32_t)(rc_low_ >> 32) != 0) {
         temp = rc_cache_;
-        do
-        {
+        do {
             *prc_++ = (uint8_t)(temp + (uint8_t)(rc_low_ >> 32));
             rc_size_++;
-            if (rc_size_ == rc_bufsize_)
-            {
+            if (rc_size_ == rc_bufsize_) {
                 outsize_+=rc_size_;
-                io_->WriteRCData(rc_buf_,rc_bufsize_);
+                if (io_->WriteRCData(rc_buf_,rc_bufsize_) != (int)rc_bufsize_) {
+                    throw (int)WRITE_ERROR;
+                }
                 rc_size_=0;
                 prc_=rc_buf_;
             }
