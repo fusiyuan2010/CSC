@@ -65,14 +65,11 @@ int MemIO::ReadBlock(uint8_t *buffer, uint32_t &size, int rc1bc0)
                 }
 
                 DataBlock dummy;
-                dummy.next = rc1bc0 ? bc_blocks_ : rc_blocks_;
+                dummy.next = *blist;
                 DataBlock *p = &dummy;
                 while(p->next) p = p->next;
                 p->next = newblock;
-                if (rc1bc0)
-                    bc_blocks_ = dummy.next;
-                else
-                    rc_blocks_ = dummy.next;
+                *blist = dummy.next;
             }
         }
     }
@@ -116,3 +113,16 @@ void MemIO::Init(void *iostream, uint32_t bsize, ISzAlloc *alloc)
 }
 
 
+void MemIO::Destroy() {
+    while (rc_blocks_) {
+        DataBlock *next = rc_blocks_->next;
+        alloc_->Free(alloc_, rc_blocks_);
+        rc_blocks_ = next;
+    }
+
+    while (bc_blocks_) {
+        DataBlock *next = bc_blocks_->next;
+        alloc_->Free(alloc_, bc_blocks_);
+        bc_blocks_ = next;
+    }
+}

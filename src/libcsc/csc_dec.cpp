@@ -142,7 +142,7 @@ class CSCDecoder
                     return -1;
                 }
 
-                while(len-- > 0) {
+                while(len-- > 0 && i < *size) {
                     dst[i] = dst[i-1];
                     i++;
                 }
@@ -701,6 +701,10 @@ CSCDecHandle CSCDec_Create(const CSCProps *props,
         return NULL;
     }
 
+    if (props->dict_size < 32 * KB) {
+        return NULL;
+    }
+
     CSCDecInstance *csc = (CSCDecInstance *)alloc->Alloc(alloc, sizeof(CSCDecInstance));
     csc->io = (MemIO *)alloc->Alloc(alloc, sizeof(MemIO));
     csc->io->Init(instream, props->csc_blocksize, alloc);
@@ -719,6 +723,7 @@ void CSCDec_Destroy(CSCDecHandle p)
 {
     CSCDecInstance *csc = (CSCDecInstance *)p;
     csc->decoder->Destroy();
+    csc->io->Destroy();
     ISzAlloc *alloc = csc->alloc;
     alloc->Free(alloc, csc->decoder);
     alloc->Free(alloc, csc->io);

@@ -32,6 +32,7 @@ class MemIO
 
 public:
     void Init(void *iostream, uint32_t bsize, ISzAlloc *alloc);
+    void Destroy();
 
     uint32_t GetBlockSize() { return bsize_; }
 
